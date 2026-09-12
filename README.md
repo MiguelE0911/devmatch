@@ -1,6 +1,57 @@
 # Guía de Puesta en Marcha Local — DevMatch
 
-## 1. Entorno de Desarrollo (Anaconda)
+## 1. Descargar el Repositorio
+
+Clona el repositorio de DevMatch en tu equipo:
+
+```bash
+git clone <URL_DEL_REPOSITORIO>
+```
+
+Entra a la carpeta del proyecto:
+
+```bash
+cd devmatch
+```
+
+Verifica que estás dentro del repositorio:
+
+```bash
+git status
+```
+
+Deberías ver información similar a:
+
+```text
+On branch main
+Your branch is up to date with 'origin/main'.
+```
+
+### Obtener la rama de integración
+
+Una vez clonado el repositorio, cambia a la rama de integración correspondiente a la etapa actual:
+
+```bash
+git checkout etapa-1
+```
+
+Actualiza la rama con los últimos cambios:
+
+```bash
+git pull origin etapa-1
+```
+
+A partir de este punto, puedes continuar con la configuración del entorno de desarrollo indicada en las siguientes secciones.
+
+> **Importante:** no trabajes directamente sobre `etapa-1`. Cuando vayas a comenzar una tarea, crea tu propia rama siguiendo la convención establecida:
+>
+> ```bash
+> git checkout -b etapa-1/<app>-<tarea>
+> ```
+
+---
+
+## 2. Entorno de Desarrollo (Anaconda)
 
 Activa el entorno virtual de Anaconda asignado al equipo:
 
@@ -19,7 +70,7 @@ pip install "psycopg2-binary>=2.9,<3.0"
 
 ---
 
-## 2. Variables de Entorno y Base de Datos
+## 3. Variables de Entorno y Base de Datos
 
 Crea tu archivo local copiando la plantilla:
 
@@ -57,7 +108,7 @@ DJANGO_SECRET_KEY=tu_llave_secreta
 
 ---
 
-## 3. Frontend (Tailwind CSS)
+## 4. Frontend (Tailwind CSS)
 
 Instala las dependencias de Node:
 
@@ -81,7 +132,7 @@ npm run watch:css
 
 ---
 
-## 4. Levantar el Servidor
+## 5. Levantar el Servidor
 
 Por ahora, **no ejecutes migraciones** si estas todavía están siendo coordinadas por el equipo.
 
@@ -101,7 +152,7 @@ Si las variables de entorno están configuradas correctamente y la conexión con
 
 ---
 
-## 5. Flujo de Ramas (Git)
+## 6. Flujo de Ramas (Git)
 
 Posiciónate en la rama de integración actual y actualízala:
 
