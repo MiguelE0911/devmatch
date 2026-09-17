@@ -32,18 +32,18 @@ Your branch is up to date with 'origin/main'.
 Una vez clonado el repositorio, cambia a la rama de integración correspondiente a la etapa actual:
 
 ```bash
-git checkout etapa-1
+git checkout etapa-1-base
 ```
 
 Actualiza la rama con los últimos cambios:
 
 ```bash
-git pull origin etapa-1
+git pull origin etapa-1-base
 ```
 
 A partir de este punto, puedes continuar con la configuración del entorno de desarrollo indicada en las siguientes secciones.
 
-> **Importante:** no trabajes directamente sobre `etapa-1`. Cuando vayas a comenzar una tarea, crea tu propia rama siguiendo la convención establecida:
+> **Importante:** no trabajes directamente sobre `etapa-1-base`. Cuando vayas a comenzar una tarea, crea tu propia rama siguiendo la convención establecida:
 >
 > ```bash
 > git checkout -b etapa-1/<app>-<tarea>
