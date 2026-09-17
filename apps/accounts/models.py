@@ -249,7 +249,7 @@ class UsuarioTecnologia(models.Model):
         ]
 
 
-class UsuarioInteres(models.Model):
+class UsuarioInteres(models.Model): 
     usuario = models.ForeignKey(
         Usuario, on_delete=models.CASCADE, db_column="usuario_id"
     )

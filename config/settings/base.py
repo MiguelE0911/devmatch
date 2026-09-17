@@ -113,7 +113,7 @@ else:
 # compartido, avisa en el chat del equipo antes de tocarlo (ver regla en
 # DEVMATCH-ESTRUCTURA.md).
 # --------------------------------------------------------------------------
-
+AUTH_USER_MODEL = "accounts.Usuario"
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
