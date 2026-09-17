@@ -1,5 +1,5 @@
-'''Infraestructura base (Etapa 1). Antes de agregar algo aquí, avisa en el
-chat del equipo (ver DEVMATCH-ESTRUCTURA.md, "Propiedad de archivos compartidos").'''
+# Infraestructura base (Etapa 1). Antes de agregar algo aquí, avisa en el
+# chat del equipo (ver DEVMATCH-ESTRUCTURA.md, "Propiedad de archivos compartidos").
 Django>=5.2,<5.3
 psycopg2-binary>=2.9,<3.0
 python-dotenv>=1.0,<2.0
