@@ -157,8 +157,8 @@ Si las variables de entorno están configuradas correctamente y la conexión con
 Posiciónate en la rama de integración actual y actualízala:
 
 ```bash
-git checkout etapa-1
-git pull origin etapa-1
+git checkout etapa-1-base
+git pull origin etapa-1-base
 ```
 
 Crea tu rama de tarea siguiendo estrictamente la convención:
@@ -192,7 +192,7 @@ git push origin etapa-1/<app>-<tarea>
 Después, abre un **Pull Request (PR)** hacia:
 
 ```text
-etapa-1
+etapa-1-base
 ```
 
 > La rama `main` está protegida y no se deben realizar pushes directos sobre ella.
