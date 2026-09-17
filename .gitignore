@@ -29,6 +29,7 @@ docs
 
 # Agentes
 .opencode
+.agents
 opencode.json
 AGENTS.md
 CLAUDE.md
