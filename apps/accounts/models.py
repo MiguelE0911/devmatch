@@ -224,7 +224,7 @@ class UsuarioHabilidad(models.Model):
     )
 
     class Meta:
-        db_table = "usuarios_habilidades"
+        db_table = "usuarios_habilidades" 
         constraints = [
             models.UniqueConstraint(
                 fields=["usuario", "habilidad"], name="uq_usuario_habilidad"

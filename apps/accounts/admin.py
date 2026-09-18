@@ -111,7 +111,7 @@ class UsuarioHabilidadAdmin(admin.ModelAdmin):
 @admin.register(UsuarioTecnologia)
 class UsuarioTecnologiaAdmin(admin.ModelAdmin):
     list_display = ("usuario", "tecnologia")
-    search_fields = ("usuario__email", "tecnologia__nombre")
+    search_fields = ("usuario__email", "tecnologia__nombre") 
 
 
 @admin.register(UsuarioInteres)
