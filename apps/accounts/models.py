@@ -150,7 +150,6 @@ class Perfil(models.Model):
     github_username = models.CharField(max_length=100, blank=True, null=True)
     avatar_url = models.TextField(blank=True, null=True)
 
-    # Estaban faltando: el SQL oficial sí las tiene.
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)
 
@@ -181,7 +180,7 @@ class CatalogoBase(models.Model):
         related_name="+",
         db_column="desactivado_por_id",
     )
-    creado_en = models.DateTimeField(auto_now_add=True)  # faltaba
+    creado_en = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         abstract = True

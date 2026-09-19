@@ -100,18 +100,9 @@ else:
     }
 
 # --------------------------------------------------------------------------
-# NOTA IMPORTANTE PARA SQUAD A (accounts-modelos):
-#
-# Cuando definan el modelo Usuario en apps/accounts/models.py (tabla
-# `usuarios` de DEVMATCH-BD.md, sección 5.1), agrega aquí la línea:
-#
-#     AUTH_USER_MODEL = "accounts.Usuario"
-#
-# ANTES de correr `makemigrations` por primera vez. No lo dejamos puesto
-# desde ya a propósito: si se declara antes de que el modelo exista,
-# Django no arranca (ImproperlyConfigured). Como este archivo es
-# compartido, avisa en el chat del equipo antes de tocarlo (ver regla en
-# DEVMATCH-ESTRUCTURA.md).
+# AUTH_USER_MODEL: modelo custom en apps/accounts (tabla `usuarios`). Debe
+# declararse ANTES de la primera migración de la app — si se agrega después,
+# Django no arranca. Archivo compartido: avisar en el chat antes de tocarlo.
 # --------------------------------------------------------------------------
 AUTH_USER_MODEL = "accounts.Usuario"
 AUTH_PASSWORD_VALIDATORS = [
