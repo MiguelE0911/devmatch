@@ -1,22 +1,23 @@
 from django.contrib import admin
-from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
-from .models import (
-    Habilidad,
-    Interes,
-    Perfil,
-    Tecnologia,
-    Usuario,
-    UsuarioHabilidad,
-    UsuarioInteres,
-    UsuarioTecnologia,
-)
+from .models import Habilidad, Interes, Perfil, Tecnologia, Usuario
+
+# NOTA: UsuarioHabilidad, UsuarioTecnologia y UsuarioInteres NO se
+# registran aquí. Django no permite registrar en el admin un modelo con
+# clave primaria compuesta (CompositePrimaryKey) — el panel de admin
+# necesita un solo campo pk simple para construir las URLs de edición.
+# Esto es intencional: esos tres modelos coinciden con el esquema
+# oficial (PK compuesta usuario_id + catalogo_id, sin columna id). Si
+# el Integrador necesita cargar/ver estos datos, usar
+# loaddata/dumpdata o un comando de fixtures (seed_data), no el admin.
 
 
 @admin.register(Usuario)
-class UsuarioAdmin(DjangoUserAdmin):
-    # No heredamos los fieldsets de DjangoUserAdmin tal cual porque referencian
-    # campos que no existen aquí (is_active, is_staff como campos reales).
+class UsuarioAdmin(admin.ModelAdmin):
+    # Ya NO hereda de DjangoUserAdmin: esa clase asume campos que
+    # Usuario no tiene (groups, user_permissions, is_superuser como
+    # campo real) porque el modelo no usa PermissionsMixin, para
+    # coincidir exactamente con el esquema oficial (sin esas tablas).
     model = Usuario
     ordering = ("email",)
     list_display = (
@@ -100,21 +101,3 @@ class TecnologiaAdmin(CatalogoAdminBase):
 @admin.register(Interes)
 class InteresAdmin(CatalogoAdminBase):
     pass
-
-
-@admin.register(UsuarioHabilidad)
-class UsuarioHabilidadAdmin(admin.ModelAdmin):
-    list_display = ("usuario", "habilidad")
-    search_fields = ("usuario__email", "habilidad__nombre")
-
-
-@admin.register(UsuarioTecnologia)
-class UsuarioTecnologiaAdmin(admin.ModelAdmin):
-    list_display = ("usuario", "tecnologia")
-    search_fields = ("usuario__email", "tecnologia__nombre") 
-
-
-@admin.register(UsuarioInteres)
-class UsuarioInteresAdmin(admin.ModelAdmin):
-    list_display = ("usuario", "interes")
-    search_fields = ("usuario__email", "interes__nombre") 
