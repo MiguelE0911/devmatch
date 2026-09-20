@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#F5F9FA">
     <title>DevMatch — Arma el equipo correcto para tu próxima idea de software</title>
     <meta name="description"
           content="DevMatch conecta a developers universitarios para formar el equipo correcto: crea proyectos, publica vacantes y revisa tu compatibilidad antes de postularte.">
@@ -34,11 +35,11 @@
 
                     <div class="flex items-center gap-2">
                         <a href="#"
-                           class="hidden rounded-full bg-violet-400 px-5 py-2.5 text-sm font-bold text-violet-950 shadow-sm transition-colors hover:bg-violet-300 sm:inline-block">
+                           class="hidden rounded-full bg-violet-400 px-5 py-3 text-sm font-bold text-violet-950 shadow-sm transition-colors hover:bg-violet-300 sm:inline-block">
                             Ingresar
                         </a>
                         <a href="#"
-                           class="rounded-full bg-violet-700 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-violet-800">
+                           class="rounded-full bg-violet-700 px-5 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-violet-800">
                             Crear mi cuenta
                         </a>
                     </div>
@@ -49,10 +50,10 @@
         <!-- ============================================================ -->
         <!-- HERO PANEL (flota sobre el bloque violeta sólido)            -->
         <!-- ============================================================ -->
-        <section class="relative z-20 rounded-b-[56px] bg-gradient-to-br from-[#C6B2E7] via-violet-400 to-violet-700 px-4 pb-20 pt-20 shadow-hero sm:px-6 lg:px-16">
-            <!-- Glow radial tras el titular -->
+        <section class="relative z-20 rounded-b-[56px] bg-gradient-to-br from-violet-700 via-violet-ray to-violet-fill-start px-4 pb-20 pt-20 shadow-hero sm:px-6 lg:px-16">
+            <!-- Glow radial difuso tras la esquina del card -->
             <div aria-hidden="true"
-                 class="pointer-events-none absolute -top-32 left-[16%] h-[440px] w-[780px] rounded-full bg-white/25 blur-[140px]"></div>
+                 class="pointer-events-none absolute -top-24 right-[-6rem] h-[440px] w-[780px] rounded-full bg-white/10 blur-[140px]"></div>
 
             <!-- Contenido del hero -->
             <div class="relative z-10 mx-auto mt-16 grid max-w-[1248px] items-center gap-12 lg:grid-cols-2 lg:gap-16"
@@ -95,38 +96,38 @@
                         </span>
                     </div>
 
-                    <div class="mt-6 flex items-center gap-6">
+                    <div class="mt-6 flex flex-col items-center gap-6 sm:flex-row">
                         {% include "core/_score_ring.html" with pct=94 size="h-32 w-32 shrink-0" %}
-                        <p class="text-sm leading-snug text-white/90">
+                        <p class="text-center text-sm leading-snug text-white/90 sm:text-left">
                             Cinco factores explican este porcentaje antes de que te postules
                         </p>
                     </div>
 
                     <div class="mt-7 space-y-3.5">
-                        <div class="grid grid-cols-[7.5rem_1fr_3rem] items-center gap-3">
+                        <div class="grid grid-cols-[6.5rem_1fr_2.5rem] items-center gap-2 sm:grid-cols-[7.5rem_1fr_3rem] sm:gap-3">
                             <span class="truncate text-sm text-white/90">Habilidades</span>
                             {% include "core/_factor_bar.html" with pct=92 %}
-                            <span class="text-right text-sm font-bold text-white">92%</span>
+                            <span class="text-right text-sm font-bold tabular-nums text-white">92%</span>
                         </div>
-                        <div class="grid grid-cols-[7.5rem_1fr_3rem] items-center gap-3">
+                        <div class="grid grid-cols-[6.5rem_1fr_2.5rem] items-center gap-2 sm:grid-cols-[7.5rem_1fr_3rem] sm:gap-3">
                             <span class="truncate text-sm text-white/90">Nivel Técnico</span>
                             {% include "core/_factor_bar.html" with pct=88 %}
-                            <span class="text-right text-sm font-bold text-white">88%</span>
+                            <span class="text-right text-sm font-bold tabular-nums text-white">88%</span>
                         </div>
-                        <div class="grid grid-cols-[7.5rem_1fr_3rem] items-center gap-3">
+                        <div class="grid grid-cols-[6.5rem_1fr_2.5rem] items-center gap-2 sm:grid-cols-[7.5rem_1fr_3rem] sm:gap-3">
                             <span class="truncate text-sm text-white/90">Tecnologías</span>
                             {% include "core/_factor_bar.html" with pct=95 %}
-                            <span class="text-right text-sm font-bold text-white">95%</span>
+                            <span class="text-right text-sm font-bold tabular-nums text-white">95%</span>
                         </div>
-                        <div class="grid grid-cols-[7.5rem_1fr_3rem] items-center gap-3">
+                        <div class="grid grid-cols-[6.5rem_1fr_2.5rem] items-center gap-2 sm:grid-cols-[7.5rem_1fr_3rem] sm:gap-3">
                             <span class="truncate text-sm text-white/90">Experiencia</span>
                             {% include "core/_factor_bar.html" with pct=80 %}
-                            <span class="text-right text-sm font-bold text-white">80%</span>
+                            <span class="text-right text-sm font-bold tabular-nums text-white">80%</span>
                         </div>
-                        <div class="grid grid-cols-[7.5rem_1fr_3rem] items-center gap-3">
+                        <div class="grid grid-cols-[6.5rem_1fr_2.5rem] items-center gap-2 sm:grid-cols-[7.5rem_1fr_3rem] sm:gap-3">
                             <span class="truncate text-sm text-white/90">Disponibilidad</span>
                             {% include "core/_factor_bar.html" with pct=100 %}
-                            <span class="text-right text-sm font-bold text-white">100%</span>
+                            <span class="text-right text-sm font-bold tabular-nums text-white">100%</span>
                         </div>
                     </div>
                 </div>
@@ -142,7 +143,7 @@
 
                 <div class="mt-12 grid gap-12 lg:grid-cols-2 lg:gap-24">
                     <div>
-                        <h3 class="text-2xl font-extrabold leading-tight text-white">Hoy</h3>
+                        <h3 class="text-center text-2xl font-extrabold leading-tight text-white">Hoy</h3>
                         <ul class="mt-8 space-y-6">
                             <li class="flex items-start gap-4">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
@@ -175,7 +176,7 @@
                     </div>
 
                     <div>
-                        <h3 class="text-2xl font-extrabold leading-tight text-white">Con DevMatch</h3>
+                        <h3 class="text-center text-2xl font-extrabold leading-tight text-white">Con DevMatch</h3>
                         <ul class="mt-8 space-y-6">
                             <li class="flex items-start gap-4">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
@@ -216,7 +217,7 @@
         <!-- ============================================================ -->
         <!-- CÓMO FUNCIONA — timeline vertical de 4 pasos                 -->
         <!-- ============================================================ -->
-        <section id="como-funciona" class="scroll-mt-24 bg-paper px-4 py-20 sm:px-6 lg:px-16 lg:py-24">
+        <section id="como-funciona" class="relative z-10 -mt-14 scroll-mt-24 rounded-t-[56px] bg-paper px-4 py-20 sm:px-6 lg:px-16 lg:py-24">
             <div class="mx-auto max-w-[1248px]">
                 <h2 class="text-center text-4xl font-extrabold tracking-tight text-violet-700">Cómo Funciona</h2>
 
@@ -418,23 +419,60 @@
         <!-- ============================================================ -->
         <!-- GRID DE 4 FEATURES SECUNDARIAS                               -->
         <!-- ============================================================ -->
-        <section class="border-t border-violet-200 bg-paper px-4 py-16 sm:px-6 lg:px-16 lg:py-20">
-            <div class="mx-auto grid max-w-[1248px] gap-10 sm:grid-cols-2 lg:grid-cols-4">
-                <div>
-                    <h3 class="text-xl font-extrabold leading-snug text-violet-700">Auditoría completa</h3>
-                    <p class="mt-3 text-sm leading-relaxed">Cada decisión crítica queda registrada con usuario, fecha y hora.</p>
-                </div>
-                <div>
-                    <h3 class="text-xl font-extrabold leading-snug text-violet-700">Reportes y moderación</h3>
-                    <p class="mt-3 text-sm leading-relaxed">Reporta proyectos o perfiles; cada caso se gestiona desde el panel.</p>
-                </div>
-                <div>
-                    <h3 class="text-xl font-extrabold leading-snug text-violet-700">Conecta tu repositorio</h3>
-                    <p class="mt-3 text-sm leading-relaxed">Extrae información de tu repositorio desde la API pública de GitHub.</p>
-                </div>
-                <div>
-                    <h3 class="text-xl font-extrabold leading-snug text-violet-700">Mis proyectos y postulaciones</h3>
-                    <p class="mt-3 text-sm leading-relaxed">Vistas separadas para rastrear lo que lideras y a lo que aplicas.</p>
+        <section class="border-t border-violet-200 bg-paper px-4 py-20 sm:px-6 lg:px-16 lg:py-24">
+            <div class="mx-auto max-w-[1248px]">
+                <h2 class="text-center text-3xl font-extrabold tracking-tight text-violet-700">Más allá del match</h2>
+
+                <div class="mt-12 grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
+                    <div class="flex items-start gap-4">
+                        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-700">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                                 stroke-linejoin="round" class="h-5 w-5" aria-hidden="true">
+                                <path d="M6 3h12v18H6zM9 12l2 2 4-4"/>
+                            </svg>
+                        </span>
+                        <div>
+                            <h3 class="text-lg font-extrabold leading-snug text-violet-700">Auditoría completa</h3>
+                            <p class="mt-2 text-sm leading-relaxed">Cada decisión crítica queda registrada con usuario, fecha y hora.</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-4">
+                        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-700">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                                 stroke-linejoin="round" class="h-5 w-5" aria-hidden="true">
+                                <path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6zM9.5 12l2 2 3.5-3.5"/>
+                            </svg>
+                        </span>
+                        <div>
+                            <h3 class="text-lg font-extrabold leading-snug text-violet-700">Reportes y moderación</h3>
+                            <p class="mt-2 text-sm leading-relaxed">Reporta proyectos o perfiles; cada caso se gestiona desde el panel.</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-4">
+                        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-700">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                                 stroke-linejoin="round" class="h-5 w-5" aria-hidden="true">
+                                <circle cx="12" cy="12" r="3"/>
+                                <path d="M12 9V4M12 20v-5"/>
+                            </svg>
+                        </span>
+                        <div>
+                            <h3 class="text-lg font-extrabold leading-snug text-violet-700">Conecta tu repositorio</h3>
+                            <p class="mt-2 text-sm leading-relaxed">Extrae información de tu repositorio desde la API pública de GitHub.</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-4">
+                        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-700">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                                 stroke-linejoin="round" class="h-5 w-5" aria-hidden="true">
+                                <path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                            </svg>
+                        </span>
+                        <div>
+                            <h3 class="text-lg font-extrabold leading-snug text-violet-700">Mis proyectos y postulaciones</h3>
+                            <p class="mt-2 text-sm leading-relaxed">Vistas separadas para rastrear lo que lideras y a lo que aplicas.</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>

@@ -4,12 +4,12 @@ Uso: {% include "core/_score_ring.html" with pct=94 size="h-32 w-32" %}
 El tamaño se pasa como clases de Tailwind; el anillo ocupa el 100% del contenedor.
 {% endcomment %}
 <div class="relative {{ size }}">
-    <svg viewBox="0 0 120 120" class="h-full w-full -rotate-90">
+    <svg viewBox="0 0 120 120" aria-hidden="true" class="h-full w-full -rotate-90">
         <circle cx="60" cy="60" r="52" fill="none" stroke-width="14" class="stroke-violet-track"/>
         <circle cx="60" cy="60" r="52" fill="none" stroke-width="14" stroke-linecap="round"
                 pathLength="100" stroke-dasharray="{{ pct }} 100" class="stroke-white"/>
     </svg>
     <div class="absolute inset-0 flex items-center justify-center">
-        <span class="text-2xl font-extrabold text-white">{{ pct }}%</span>
+        <span class="text-2xl font-extrabold tabular-nums text-white">{{ pct }}%</span>
     </div>
 </div>

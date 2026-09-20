@@ -2,7 +2,7 @@
 Barra de progreso horizontal pill.
 Uso: {% include "core/_factor_bar.html" with pct=92 %}
 {% endcomment %}
-<div class="h-2 overflow-hidden rounded-full bg-violet-track">
+<div class="h-2 overflow-hidden rounded-full bg-violet-track" aria-hidden="true">
     <div class="h-full rounded-full bg-gradient-to-r from-violet-fill-start to-violet-fill-end"
          style="width: {{ pct }}%;"></div>
 </div>

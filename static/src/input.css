@@ -1,3 +1,6 @@
+/* Tokens de diseño: mapa de colores (theme.css) — ver sección INTEGRACIÓN */
+@import "./theme.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -10,4 +13,33 @@
 :focus-visible {
     outline: 3px solid #A78BFA;
     outline-offset: 2px;
+}
+
+/* Superficies del navegador con tinte de marca */
+html {
+    caret-color: #6D28D9;
+}
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #A380D9 #F5F9FA;
+}
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background-color: #F5F9FA;
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: #A380D9;
+    border-radius: 999px;
+    border: 2px solid #F5F9FA;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: #6D28D9;
 }
