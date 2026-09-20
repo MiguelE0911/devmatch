@@ -42,6 +42,12 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.accounts",
     "apps.projects",
+    "apps.applications",
+    "apps.matching",
+    "apps.teams",
+    "apps.audit",
+    "apps.reviews",
+    "apps.moderation",
 ]
 
 MIDDLEWARE = [
