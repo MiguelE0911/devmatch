@@ -18,15 +18,8 @@
 <body class="bg-paper font-montserrat text-ink antialiased overflow-x-hidden">
 
     <main>
-        <!-- ============================================================ -->
-        <!-- HERO PANEL (flota sobre el bloque violeta sólido)            -->
-        <!-- ============================================================ -->
-        <section class="relative z-20 rounded-b-[56px] bg-gradient-to-br from-[#C6B2E7] via-violet-400 to-violet-700 px-4 pb-20 pt-4 shadow-hero sm:px-6 lg:px-16">
-            <!-- Glow radial tras el titular -->
-            <div aria-hidden="true"
-                 class="pointer-events-none absolute -top-32 left-[16%] h-[440px] w-[780px] rounded-full bg-white/25 blur-[140px]"></div>
-
-            <!-- Navbar flotante tipo píldora -->
+        <!-- Navbar fija tipo píldora que sigue el scroll -->
+        <header class="fixed inset-x-0 top-0 z-50 px-4 pt-4 sm:px-6 lg:px-16">
             <nav class="relative z-10 mx-auto max-w-[1248px]" aria-label="Navegación principal">
                 <div class="flex items-center justify-between gap-4 rounded-full bg-paper/95 py-3 pl-8 pr-3 shadow-navbar ring-1 ring-white/70 backdrop-blur">
                     <a href="#inicio" class="text-xl font-extrabold tracking-tight">
@@ -51,6 +44,15 @@
                     </div>
                 </div>
             </nav>
+        </header>
+
+        <!-- ============================================================ -->
+        <!-- HERO PANEL (flota sobre el bloque violeta sólido)            -->
+        <!-- ============================================================ -->
+        <section class="relative z-20 rounded-b-[56px] bg-gradient-to-br from-[#C6B2E7] via-violet-400 to-violet-700 px-4 pb-20 pt-20 shadow-hero sm:px-6 lg:px-16">
+            <!-- Glow radial tras el titular -->
+            <div aria-hidden="true"
+                 class="pointer-events-none absolute -top-32 left-[16%] h-[440px] w-[780px] rounded-full bg-white/25 blur-[140px]"></div>
 
             <!-- Contenido del hero -->
             <div class="relative z-10 mx-auto mt-16 grid max-w-[1248px] items-center gap-12 lg:grid-cols-2 lg:gap-16"
@@ -135,82 +137,86 @@
         <!-- COMPARACIÓN: así se arman los equipos hoy vs DevMatch        -->
         <!-- ============================================================ -->
         <section class="relative z-10 -mt-14 bg-violet-700 px-4 pb-20 pt-24 sm:px-6 lg:px-16">
-            <div class="mx-auto grid max-w-[1248px] gap-12 lg:grid-cols-2 lg:gap-24">
-                <div>
-                    <h2 class="text-3xl font-extrabold leading-tight text-white lg:text-4xl">Así se arman los equipos hoy</h2>
-                    <ul class="mt-8 space-y-6">
-                        <li class="flex items-start gap-4">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
-                                 class="mt-1 h-5 w-5 shrink-0 text-white/90" aria-hidden="true">
-                                <path d="M6 6l12 12M18 6L6 18"/>
-                            </svg>
-                            <p class="leading-relaxed text-white/85">
-                                Los grupos se forman por cercanía o amistad, no por habilidades complementarias.
-                            </p>
-                        </li>
-                        <li class="flex items-start gap-4">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
-                                 class="mt-1 h-5 w-5 shrink-0 text-white/90" aria-hidden="true">
-                                <path d="M6 6l12 12M18 6L6 18"/>
-                            </svg>
-                            <p class="leading-relaxed text-white/85">
-                                Nadie sabe qué roles faltan hasta que el proyecto ya está en desarrollo.
-                            </p>
-                        </li>
-                        <li class="flex items-start gap-4">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
-                                 class="mt-1 h-5 w-5 shrink-0 text-white/90" aria-hidden="true">
-                                <path d="M6 6l12 12M18 6L6 18"/>
-                            </svg>
-                            <p class="leading-relaxed text-white/85">
-                                Los proyectos se abandonan por falta de roles clave, sin quedar registro de por qué.
-                            </p>
-                        </li>
-                    </ul>
-                </div>
+            <div class="mx-auto max-w-[1248px]">
+                <h2 class="text-center text-3xl font-extrabold leading-tight tracking-tight text-white">Así se arman los equipos</h2>
 
-                <div>
-                    <h2 class="text-3xl font-extrabold leading-tight text-white lg:text-4xl">Con DevMatch</h2>
-                    <ul class="mt-8 space-y-6">
-                        <li class="flex items-start gap-4">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
-                                 stroke-linejoin="round" class="mt-1 h-5 w-5 shrink-0 text-white" aria-hidden="true">
-                                <path d="M5 12.5 10 17 19 7"/>
-                            </svg>
-                            <p class="font-bold leading-relaxed text-white">
-                                El match score compara habilidades, nivel, tecnologías, experiencia y disponibilidad.
-                            </p>
-                        </li>
-                        <li class="flex items-start gap-4">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
-                                 stroke-linejoin="round" class="mt-1 h-5 w-5 shrink-0 text-white" aria-hidden="true">
-                                <path d="M5 12.5 10 17 19 7"/>
-                            </svg>
-                            <p class="font-bold leading-relaxed text-white">
-                                La vista de equipo muestra qué roles ya están cubiertos y cuáles siguen abiertos.
-                            </p>
-                        </li>
-                        <li class="flex items-start gap-4">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
-                                 stroke-linejoin="round" class="mt-1 h-5 w-5 shrink-0 text-white" aria-hidden="true">
-                                <path d="M5 12.5 10 17 19 7"/>
-                            </svg>
-                            <p class="font-bold leading-relaxed text-white">
-                                Cada decisión queda registrada: quién, cuándo y qué cambió.
-                            </p>
-                        </li>
-                    </ul>
+                <div class="mt-12 grid gap-12 lg:grid-cols-2 lg:gap-24">
+                    <div>
+                        <h3 class="text-2xl font-extrabold leading-tight text-white">Hoy</h3>
+                        <ul class="mt-8 space-y-6">
+                            <li class="flex items-start gap-4">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                                     class="mt-1 h-5 w-5 shrink-0 text-white/90" aria-hidden="true">
+                                    <path d="M6 6l12 12M18 6L6 18"/>
+                                </svg>
+                                <p class="leading-relaxed text-white/85">
+                                    Los grupos se forman por cercanía o amistad, no por habilidades complementarias.
+                                </p>
+                            </li>
+                            <li class="flex items-start gap-4">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                                     class="mt-1 h-5 w-5 shrink-0 text-white/90" aria-hidden="true">
+                                    <path d="M6 6l12 12M18 6L6 18"/>
+                                </svg>
+                                <p class="leading-relaxed text-white/85">
+                                    Nadie sabe qué roles faltan hasta que el proyecto ya está en desarrollo.
+                                </p>
+                            </li>
+                            <li class="flex items-start gap-4">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                                     class="mt-1 h-5 w-5 shrink-0 text-white/90" aria-hidden="true">
+                                    <path d="M6 6l12 12M18 6L6 18"/>
+                                </svg>
+                                <p class="leading-relaxed text-white/85">
+                                    Los proyectos se abandonan por falta de roles clave, sin quedar registro de por qué.
+                                </p>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div>
+                        <h3 class="text-2xl font-extrabold leading-tight text-white">Con DevMatch</h3>
+                        <ul class="mt-8 space-y-6">
+                            <li class="flex items-start gap-4">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                                     stroke-linejoin="round" class="mt-1 h-5 w-5 shrink-0 text-white" aria-hidden="true">
+                                    <path d="M5 12.5 10 17 19 7"/>
+                                </svg>
+                                <p class="font-bold leading-relaxed text-white">
+                                    El match score compara habilidades, nivel, tecnologías, experiencia y disponibilidad.
+                                </p>
+                            </li>
+                            <li class="flex items-start gap-4">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                                     stroke-linejoin="round" class="mt-1 h-5 w-5 shrink-0 text-white" aria-hidden="true">
+                                    <path d="M5 12.5 10 17 19 7"/>
+                                </svg>
+                                <p class="font-bold leading-relaxed text-white">
+                                    La vista de equipo muestra qué roles ya están cubiertos y cuáles siguen abiertos.
+                                </p>
+                            </li>
+                            <li class="flex items-start gap-4">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                                     stroke-linejoin="round" class="mt-1 h-5 w-5 shrink-0 text-white" aria-hidden="true">
+                                    <path d="M5 12.5 10 17 19 7"/>
+                                </svg>
+                                <p class="font-bold leading-relaxed text-white">
+                                    Cada decisión queda registrada: quién, cuándo y qué cambió.
+                                </p>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </section>
 
         <!-- Transición violeta → papel -->
-        <div aria-hidden="true" class="h-12 bg-gradient-to-b from-violet-700 to-paper"></div>
+        <div aria-hidden="true" class="h-24 bg-gradient-to-b from-violet-700 via-violet-400 to-paper"></div>
 
         <!-- ============================================================ -->
         <!-- CÓMO FUNCIONA — timeline vertical de 4 pasos                 -->
         <!-- ============================================================ -->
-        <section id="como-funciona" class="bg-paper px-4 py-20 sm:px-6 lg:px-16 lg:py-24">
+        <section id="como-funciona" class="scroll-mt-24 bg-paper px-4 py-20 sm:px-6 lg:px-16 lg:py-24">
             <div class="mx-auto max-w-[1248px]">
                 <h2 class="text-center text-4xl font-extrabold tracking-tight text-violet-700">Cómo Funciona</h2>
 
@@ -316,7 +322,7 @@
 
                     <!-- Remate de la línea (T invertida) -->
                     <div aria-hidden="true"
-                         class="absolute -bottom-9 left-[20px] h-1 w-14 rounded-full bg-violet-track/70"></div>
+                         class="absolute bottom-4 left-[-6px] h-1 w-14 rounded-full bg-violet-track/70"></div>
                 </div>
             </div>
         </section>
@@ -324,7 +330,7 @@
         <!-- ============================================================ -->
         <!-- LO QUE HACE A DEVMATCH DIFERENTE — 3 bloques en zigzag       -->
         <!-- ============================================================ -->
-        <section id="funciones" class="border-t border-violet-200 bg-paper px-4 py-20 sm:px-6 lg:px-16 lg:py-24">
+        <section id="funciones" class="scroll-mt-24 border-t border-violet-200 bg-paper px-4 py-20 sm:px-6 lg:px-16 lg:py-24">
             <div class="mx-auto max-w-[1248px]">
                 <h2 class="text-4xl font-extrabold tracking-tight text-violet-700">Lo que hace a DevMatch diferente</h2>
 
@@ -436,7 +442,7 @@
         <!-- ============================================================ -->
         <!-- UN PERFIL, DOS FORMAS DE PARTICIPAR                          -->
         <!-- ============================================================ -->
-        <section id="roles" class="border-t border-violet-200 bg-paper px-4 py-20 sm:px-6 lg:px-16 lg:py-24">
+        <section id="roles" class="scroll-mt-24 border-t border-violet-200 bg-paper px-4 py-20 sm:px-6 lg:px-16 lg:py-24">
             <div class="mx-auto max-w-[1248px]">
                 <h2 class="text-4xl font-extrabold tracking-tight text-violet-700">Un perfil, dos formas de participar</h2>
                 <p class="mt-4 max-w-2xl text-lg leading-relaxed">
@@ -465,7 +471,7 @@
         <!-- ============================================================ -->
         <!-- CTA FINAL — 2 tarjetas contrastantes                         -->
         <!-- ============================================================ -->
-        <section class="border-t border-violet-200 bg-paper px-4 pb-10 pt-4 sm:px-6 lg:px-16">
+        <section class="border-t border-violet-200 bg-paper px-4 py-20 sm:px-6 lg:px-16 lg:py-24">
             <div class="mx-auto grid max-w-[1248px] gap-8 md:grid-cols-2">
                 <div class="rounded-[28px] bg-gradient-to-br from-violet-ray to-violet-deep p-9 shadow-card-violet sm:p-10">
                     <h3 class="text-3xl font-extrabold leading-tight text-white">¿Tienes una idea?</h3>
@@ -500,7 +506,7 @@
             <a href="#inicio" class="text-lg font-extrabold tracking-tight">
                 <span class="text-violet-400">DEV</span><span class="text-violet-700">MATCH</span>
             </a>
-            <p class="text-sm text-ink/70">Desarrollo de Software V · Etapa 1</p>
+            <p class="text-sm text-ink/70">Syntax Error - Etapa 1</p>
         </div>
     </footer>
 
