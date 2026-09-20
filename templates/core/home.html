@@ -500,9 +500,10 @@
     </main>
 
     <!-- ============================================================ -->
-    <!-- FOOTER: la landing NO usa el footer global (partials/footer.html).
-         Aquí irá un footer exclusivo del landing (pendiente de diseño). -->
+    <!-- FOOTER EXCLUSIVO del landing (core/_landing_footer.html).
+         La landing NO usa el footer global (partials/footer.html).   -->
     <!-- ============================================================ -->
+    {% include "core/_landing_footer.html" %}
 
     <script src="{% static 'js/landing-menu.js' %}"></script>
 
