@@ -3,12 +3,12 @@ from django.shortcuts import render
 
 
 def home(request):
-    """
-    Página de inicio / health-check. (Parte de Etapa1/core-setup)
+    """Landing page pública de DevMatch."""
+    return render(request, "core/home.html")
 
-    Comprueba si la conexión a PostgreSQL/Neon está funcionando
-    y muestra información básica de la conexión.
-    """
+
+def health(request):
+    """Health-check de conexión a la base de datos. (Ex-home de Etapa1)."""
     db_ok = True
     db_error = None
 
@@ -32,4 +32,4 @@ def home(request):
         "db_port": db_settings.get("PORT") or "5432",
     }
 
-    return render(request, "core/home.html", context)
+    return render(request, "core/health.html", context)

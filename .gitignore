@@ -26,6 +26,7 @@ node_modules/
 
 # Documentación
 docs
+PRODUCT.md
 
 # Agentes
 .opencode
@@ -33,3 +34,9 @@ docs
 opencode.json
 AGENTS.md
 CLAUDE.md
+.github/agents
+
+# Skills
+.github/skills
+.impeccable
+DESIGN.md
