@@ -8,7 +8,7 @@ def home(request):
 
 
 def health(request):
-    """Health-check de conexión a la base de datos. (Ex-home de Etapa1)."""
+    """Health-check de conexión a la base de datos."""
     db_ok = True
     db_error = None
 

@@ -4,8 +4,6 @@ Footer violeta EXCLUSIVO del landing page. NO se usa dentro de la web
 templates/partials/footer.html.
 Los FAQs usan <details>/<summary> nativos (sin JS, accesibles por teclado);
 el chevron rota con la variante group-open de Tailwind.
-Links de registro/login apuntan a "#" igual que la navbar del landing;
-cuando Squad B defina accounts:login/register, reemplazar por {% url %}.
 Uso: {% include "core/_landing_footer.html" %}
 {% endcomment %}
 
@@ -33,10 +31,12 @@ Uso: {% include "core/_landing_footer.html" %}
                 </p>
 
                 <div class="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+                    {% comment %}TODO Squad B: {% url 'accounts:login' %} cuando existan las vistas (Etapa 1){% endcomment %}
                     <a href="#"
                        class="rounded-full bg-violet-400 px-6 py-3 text-center text-sm font-bold text-violet-950 shadow-sm transition-colors hover:bg-violet-300 sm:w-auto">
                         Ingresar
                     </a>
+                    {% comment %}TODO Squad B: {% url 'accounts:register' %} cuando existan las vistas (Etapa 1){% endcomment %}
                     <a href="#"
                        class="rounded-full bg-white px-6 py-3 text-center text-sm font-bold text-violet-700 shadow-sm transition-colors hover:bg-violet-100 sm:w-auto">
                         Crear mi cuenta
@@ -134,7 +134,9 @@ Uso: {% include "core/_landing_footer.html" %}
             <nav aria-label="Acceso a la plataforma">
                 <h3 class="text-xs font-bold uppercase tracking-widest text-white/60">Acceso</h3>
                 <ul class="mt-4 space-y-2.5">
+                    {% comment %}TODO Squad B: {% url 'accounts:login' %} cuando existan las vistas (Etapa 1){% endcomment %}
                     <li><a href="#" class="text-sm font-semibold text-white/80 transition-colors hover:text-white">Ingresar</a></li>
+                    {% comment %}TODO Squad B: {% url 'accounts:register' %} cuando existan las vistas (Etapa 1){% endcomment %}
                     <li><a href="#" class="text-sm font-semibold text-white/80 transition-colors hover:text-white">Crear mi cuenta</a></li>
                 </ul>
             </nav>
