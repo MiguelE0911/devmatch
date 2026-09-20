@@ -2,77 +2,13 @@
 <!DOCTYPE html>
 <html lang="es" class="scroll-smooth">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#F5F9FA">
-    <title>DevMatch — Arma el equipo correcto para tu próxima idea de software</title>
-    <meta name="description"
-          content="DevMatch conecta a developers universitarios para formar el equipo correcto: crea proyectos, publica vacantes y revisa tu compatibilidad antes de postularte.">
-
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap"
-          rel="stylesheet">
-
-    <link rel="stylesheet" href="{% static 'dist/output.css' %}">
+    {% include "core/_head.html" with title="DevMatch — Arma el equipo correcto para tu próxima idea de software" description="DevMatch conecta a developers universitarios para formar el equipo correcto: crea proyectos, publica vacantes y revisa tu compatibilidad antes de postularte." %}
 </head>
 <body class="bg-paper font-montserrat text-ink antialiased overflow-x-hidden">
 
     <main>
-        <!-- Navbar fija tipo píldora que sigue el scroll -->
-        <header class="fixed inset-x-0 top-0 z-50 px-4 pt-4 sm:px-6 lg:px-16">
-            <nav class="relative z-10 mx-auto max-w-[1248px]" aria-label="Navegación principal">
-                <div class="flex items-center justify-between gap-2 rounded-full bg-paper/95 py-2.5 pl-5 pr-2 shadow-navbar ring-1 ring-white/70 backdrop-blur sm:gap-4 sm:py-3 sm:pl-8 sm:pr-3">
-                    <a href="#inicio" class="text-lg font-extrabold tracking-tight sm:text-xl">
-                        <span class="text-violet-400">DEV</span><span class="text-violet-700">MATCH</span>
-                    </a>
-
-                    <div class="hidden items-center gap-8 text-sm font-semibold text-violet-600 md:flex">
-                        <a href="#como-funciona" class="transition-colors hover:text-violet-800">Cómo funciona</a>
-                        <a href="#funciones" class="transition-colors hover:text-violet-800">Funciones</a>
-                        <a href="#roles" class="transition-colors hover:text-violet-800">Roles</a>
-                    </div>
-
-                    <div class="flex items-center gap-2">
-                        <a href="#"
-                           class="hidden rounded-full bg-violet-400 px-4 py-2.5 text-xs font-bold text-violet-950 shadow-sm transition-colors hover:bg-violet-300 sm:inline-block sm:px-5 sm:py-3 sm:text-sm">
-                            Ingresar
-                        </a>
-                        <a href="#"
-                           class="hidden rounded-full bg-violet-700 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-violet-800 sm:inline-block sm:px-5 sm:py-3 sm:text-sm">
-                            Crear mi cuenta
-                        </a>
-                        <button type="button" id="menu-toggle" aria-expanded="false" aria-controls="mobile-menu"
-                                class="flex h-10 w-10 items-center justify-center rounded-full bg-violet-100 text-violet-700 transition-colors hover:bg-violet-200 md:hidden">
-                            <span class="sr-only">Abrir menú</span>
-                            <svg id="menu-icon-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                                 stroke-linecap="round" class="h-5 w-5" aria-hidden="true">
-                                <path d="M4 7h16M4 12h16M4 17h16"/>
-                            </svg>
-                            <svg id="menu-icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                                 stroke-linecap="round" class="hidden h-5 w-5" aria-hidden="true">
-                                <path d="M6 6l12 12M18 6L6 18"/>
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Menú móvil (hamburguesa): secciones + accesos -->
-                <div id="mobile-menu" class="mt-3 hidden rounded-[28px] bg-paper/95 p-5 shadow-navbar ring-1 ring-white/70 backdrop-blur md:hidden">
-                    <div class="flex flex-col gap-1">
-                        <a href="#como-funciona" class="rounded-2xl px-4 py-3 text-sm font-semibold text-violet-600 transition-colors hover:bg-violet-100">Cómo funciona</a>
-                        <a href="#funciones" class="rounded-2xl px-4 py-3 text-sm font-semibold text-violet-600 transition-colors hover:bg-violet-100">Funciones</a>
-                        <a href="#roles" class="rounded-2xl px-4 py-3 text-sm font-semibold text-violet-600 transition-colors hover:bg-violet-100">Roles</a>
-                    </div>
-                    <div class="mt-3 flex flex-col gap-2.5 border-t border-violet-100 pt-4">
-                        <a href="#"
-                           class="rounded-full bg-violet-100 px-5 py-3 text-center text-sm font-bold text-violet-700 transition-colors hover:bg-violet-200">Ingresar</a>
-                        <a href="#"
-                           class="rounded-full bg-violet-700 px-5 py-3 text-center text-sm font-bold text-white shadow-sm transition-colors hover:bg-violet-800">Crear mi cuenta</a>
-                    </div>
-                </div>
-            </nav>
-        </header>
+        <!-- Navbar exclusivo del landing (ver core/_landing_navbar.html) -->
+        {% include "core/_landing_navbar.html" %}
 
         <!-- ============================================================ -->
         <!-- HERO PANEL (flota sobre el bloque violeta sólido)            -->
@@ -564,45 +500,11 @@
     </main>
 
     <!-- ============================================================ -->
-    <!-- FOOTER — cierre ligero (no existía en el prototipo)          -->
+    <!-- FOOTER: la landing NO usa el footer global (partials/footer.html).
+         Aquí irá un footer exclusivo del landing (pendiente de diseño). -->
     <!-- ============================================================ -->
-    <footer class="border-t border-violet-200 bg-paper px-4 py-10 sm:px-6 lg:px-16">
-        <div class="mx-auto flex max-w-[1248px] flex-col items-center justify-between gap-5 sm:flex-row">
-            <a href="#inicio" class="text-lg font-extrabold tracking-tight">
-                <span class="text-violet-400">DEV</span><span class="text-violet-700">MATCH</span>
-            </a>
-            <p class="text-sm text-ink/70">Syntax Error - Etapa 1</p>
-        </div>
-    </footer>
 
-    <script>
-        (function () {
-            var toggle = document.getElementById("menu-toggle");
-            var menu = document.getElementById("mobile-menu");
-            var iconOpen = document.getElementById("menu-icon-open");
-            var iconClose = document.getElementById("menu-icon-close");
-            if (!toggle || !menu) return;
-
-            function setOpen(open) {
-                menu.classList.toggle("hidden", !open);
-                toggle.setAttribute("aria-expanded", open ? "true" : "false");
-                iconOpen.classList.toggle("hidden", open);
-                iconClose.classList.toggle("hidden", !open);
-            }
-
-            toggle.addEventListener("click", function () {
-                setOpen(menu.classList.contains("hidden"));
-            });
-
-            menu.addEventListener("click", function (e) {
-                if (e.target.closest("a")) setOpen(false);
-            });
-
-            document.addEventListener("keydown", function (e) {
-                if (e.key === "Escape") setOpen(false);
-            });
-        })();
-    </script>
+    <script src="{% static 'js/landing-menu.js' %}"></script>
 
 </body>
 </html>
