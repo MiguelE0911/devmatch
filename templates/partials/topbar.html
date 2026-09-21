@@ -5,7 +5,7 @@ solo quiera esta barra (sin sidebar) sobrescribe {% block sidebar %} con vacío.
 Colores: bg-app-navbar (#333074), buscador bg-app-search (#5B56A5).
 {% endcomment %}
 <header class="sticky top-0 z-30 h-16 bg-app-navbar text-white">
-    <div class="relative mx-auto grid h-full w-full max-w-[1248px] grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:px-6 lg:px-8">
+    <div class="relative mx-auto grid h-full w-full max-w-[1248px] grid-cols-[1fr_minmax(0,44rem)_1fr] items-center gap-3 px-4 sm:px-6 lg:px-8">
         {# TODO: cuando exista el home interno (post-login), el logo debe apuntar a él y no al landing. #}
         <div class="flex items-center">
             <a href="{% url 'core:home' %}" class="flex items-baseline gap-1 whitespace-nowrap font-bold text-lg tracking-tight">
@@ -15,7 +15,7 @@ Colores: bg-app-navbar (#333074), buscador bg-app-search (#5B56A5).
         </div>
 
         {# Columna central: buscador + filtros, centrados entre logo e iconos. #}
-        <div class="flex w-full max-w-xl items-center gap-1">
+        <div class="flex w-full items-center gap-1">
             <div class="relative w-full">
                 <span class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/80">
                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
