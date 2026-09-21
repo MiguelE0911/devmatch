@@ -9,12 +9,16 @@
     {% block extra_head %}{% endblock %}
 </head>
 <body class="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
-    {% include "partials/navbar.html" %}
+    {% block topbar %}{% include "partials/topbar.html" %}{% endblock %}
 
-    <main class="flex-1 w-full max-w-5xl mx-auto px-4 py-8">
-        {% include "partials/alerts.html" %}
-        {% block content %}{% endblock %}
-    </main>
+    <div class="flex flex-1">
+        {% block sidebar %}{% include "partials/sidebar.html" %}{% endblock %}
+
+        <main class="flex-1 w-full max-w-5xl mx-auto px-4 py-8">
+            {% include "partials/alerts.html" %}
+            {% block content %}{% endblock %}
+        </main>
+    </div>
 
     {% include "partials/footer.html" %}
 
