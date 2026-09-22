@@ -128,17 +128,52 @@ class VacanteForm(forms.ModelForm):
             "descripcion": "Descripción de la vacante",
         }
 
+    def __init__(self, *args, include_estado=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        # `habilidades`/`tecnologias` no son campos del modelo sino tablas
+        # puente; Django no las precarga solo, así que las semilla desde las
+        # filas puente actuales cuando editamos una vacante existente.
+        if self.instance.pk:
+            self.fields["habilidades"].initial = [
+                bridge.habilidad_id
+                for bridge in self.instance.vacantehabilidadrequerida_set.all()
+            ]
+            self.fields["tecnologias"].initial = [
+                bridge.tecnologia_id
+                for bridge in self.instance.vacantetecnologiarequerida_set.all()
+            ]
+        if include_estado:
+            self.fields["estado"] = forms.ChoiceField(
+                choices=Vacante.ESTADO_CHOICES,
+                initial=(
+                    self.instance.estado if self.instance.pk else Vacante.ESTADO_ABIERTA
+                ),
+                label="Estado de la vacante",
+                widget=forms.Select(
+                    attrs={
+                        "class": "w-48 appearance-none rounded-xl border border-slate-300 bg-white py-2.5 pl-9 pr-10 text-sm font-medium text-slate-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100",
+                    }
+                ),
+            )
+
     def clean_cupos_totales(self):
         cupos = self.cleaned_data.get("cupos_totales")
-        if cupos is not None and not (1 <= cupos <= 50):
-            raise forms.ValidationError("Los cupos deben estar entre 1 y 50.")
+        if cupos is not None:
+            if not (1 <= cupos <= 50):
+                raise forms.ValidationError("Los cupos deben estar entre 1 y 50.")
+            if self.instance.pk and cupos < (self.instance.cupos_ocupados or 0):
+                raise forms.ValidationError(
+                    "No se puede bajar a menos de los cupos ya ocupados "
+                    f"({self.instance.cupos_ocupados})."
+                )
         return cupos
 
     def save(self, commit=True):
         vacante = super().save(commit=False)
         # Toda vacante nace abierta; 'cubierta'/'cancelada' solo los gestionan
-        # los triggers o una edición futura (ver DevMatch-BD 6.2).
-        vacante.estado = Vacante.ESTADO_ABIERTA
+        # los triggers o la edición posterior (ver DevMatch-BD 6.2).
+        if not self.instance.pk:
+            vacante.estado = Vacante.ESTADO_ABIERTA
         if commit:
             vacante.save()
             ids_habilidades = {h.pk for h in self.cleaned_data["habilidades"]}

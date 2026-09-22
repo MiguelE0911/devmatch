@@ -25,4 +25,14 @@ urlpatterns = [
         views.VacancyCreateView.as_view(),
         name="vacancy_create",
     ),
+    path(
+        "vacantes/<int:pk>/editar/",
+        views.VacancyUpdateView.as_view(),
+        name="vacancy_edit",
+    ),
+    path(
+        "vacantes/<int:pk>/eliminar/",
+        views.VacancyDeleteView.as_view(),
+        name="vacancy_delete",
+    ),
 ]

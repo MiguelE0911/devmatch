@@ -7,7 +7,7 @@ from django.views import View
 from django.views.generic import CreateView, DetailView, UpdateView
 
 from .forms import ProyectoForm, VacanteForm
-from .models import Proyecto, ProyectoMedia
+from .models import Proyecto, ProyectoMedia, Vacante
 
 
 TABS = ("vacantes", "descripcion", "galeria")
@@ -196,6 +196,108 @@ class VacancyCreateView(LoginRequiredMixin, CreateView):
         # URL aquí con reverse para no tocar models.py.
         return (
             reverse("projects:project_detail", kwargs={"pk": self.proyecto.pk})
+            + "?tab=vacantes"
+        )
+
+
+class VacancyUpdateView(LoginRequiredMixin, UpdateView):
+    """Edición de una vacante. Solo el creador (dueño) del proyecto.
+
+    A diferencia del alta, aquí `estado` sí es editable ('abierta' /
+    'cubierta' / 'cancelada'): cobertura y cancelación las gestiona el dueño;
+    el trigger la mantiene en alta mientras el cupo esté vacante.
+    """
+
+    model = Vacante
+    form_class = VacanteForm
+    template_name = "projects/vacancy_form.html"
+    context_object_name = "vacante"
+    pk_url_kwarg = "pk"
+
+    def dispatch(self, request, *args, **kwargs):
+        vacante = get_object_or_404(
+            Vacante.objects.select_related("proyecto__creador").filter(
+                es_activo=True
+            ),
+            pk=kwargs["pk"],
+        )
+        if request.user.id != vacante.proyecto.creador_id:
+            messages.error(
+                request, "Solo el creador del proyecto puede editar la vacante."
+            )
+            return redirect(
+                "projects:project_detail", pk=vacante.proyecto.pk
+            )
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_queryset(self):
+        return Vacante.objects.select_related("proyecto__creador").filter(
+            es_activo=True
+        )
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["include_estado"] = True
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["proyecto"] = self.object.proyecto
+        ctx["es_dueno"] = True
+        ctx["estado_badge"] = badge_estado(self.object.proyecto)
+        ctx.update(datos_laterales(self.object.proyecto, self.request.user))
+        return ctx
+
+    def form_valid(self, form):
+        messages.success(
+            self.request, "Vacante actualizada correctamente."
+        )
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return (
+            reverse(
+                "projects:project_detail",
+                kwargs={"pk": self.object.proyecto.pk},
+            )
+            + "?tab=vacantes"
+        )
+
+
+class VacancyDeleteView(LoginRequiredMixin, View):
+    """"Desactivar" una vacante: es_activo=False (no hay DELETE físico).
+
+    Mismo contrato que ProyectoDeleteView: el trigger
+    fn_prevenir_borrado_fisico bloquea el DELETE, así que se oculta
+    conservando historial. Los cupos ocupados de la vacante se mantienen.
+    """
+
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        vacante = get_object_or_404(
+            Vacante.objects.select_related("proyecto__creador").filter(
+                es_activo=True
+            ),
+            pk=pk,
+        )
+        proyecto = vacante.proyecto
+        if request.user.id != proyecto.creador_id:
+            messages.error(
+                request, "Solo el creador del proyecto puede desactivar la vacante."
+            )
+            return redirect("projects:project_detail", pk=proyecto.pk)
+
+        vacante.es_activo = False
+        vacante.desactivado_en = timezone.now()
+        vacante.desactivado_por = request.user
+        vacante.save()
+
+        messages.success(
+            request, f"La vacante «{vacante.titulo}» se desactivó correctamente."
+        )
+        return redirect(
+            reverse("projects:project_detail", kwargs={"pk": proyecto.pk})
             + "?tab=vacantes"
         )
 
