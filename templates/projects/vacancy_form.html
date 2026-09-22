@@ -33,29 +33,15 @@
                     {{ form.descripcion.errors }}
                 </div>
 
-                <div class="grid gap-6 sm:grid-cols-2">
-                    <div>
-                        <label for="{{ form.cupos_totales.id_for_label }}" class="mb-1.5 block text-sm font-semibold text-slate-800">
-                            {{ form.cupos_totales.label }}
-                        </label>
-                        {{ form.cupos_totales }}
-                        {{ form.cupos_totales.errors }}
-                    </div>
-
-                    <div>
-                        <label for="{{ form.estado.id_for_label }}" class="mb-1.5 block text-sm font-semibold text-slate-800">
-                            {{ form.estado.label }}
-                        </label>
-                        <div class="relative">
-                            <span id="estado-dot" class="pointer-events-none absolute left-4 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-green-500"></span>
-                            {{ form.estado }}
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-                                 class="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400">
-                                <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/>
-                            </svg>
-                        </div>
-                        {{ form.estado.errors }}
-                    </div>
+                <div>
+                    <label for="{{ form.cupos_totales.id_for_label }}" class="mb-1.5 block text-sm font-semibold text-slate-800">
+                        {{ form.cupos_totales.label }}
+                    </label>
+                    <p class="mb-2 text-xs leading-relaxed text-slate-500">
+                        Mínimo 1, máximo 50 por vacante.
+                    </p>
+                    {{ form.cupos_totales }}
+                    {{ form.cupos_totales.errors }}
                 </div>
 
                 <div>
@@ -127,21 +113,3 @@
     </aside>
 </div>
 {% endblock content %}
-
-{% block extra_scripts %}
-<script>
-    document.addEventListener("DOMContentLoaded", function () {
-        var select = document.getElementById("{{ form.estado.id_for_label }}");
-        var dot = document.getElementById("estado-dot");
-        var colores = { abierta: "bg-green-500", cubierta: "bg-violet-500", cancelada: "bg-slate-400" };
-        if (select && dot) {
-            var actualizar = function () {
-                dot.className = "pointer-events-none absolute left-4 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full " +
-                    (colores[select.value] || "bg-green-500");
-            };
-            select.addEventListener("change", actualizar);
-            actualizar();
-        }
-    });
-</script>
-{% endblock extra_scripts %}
