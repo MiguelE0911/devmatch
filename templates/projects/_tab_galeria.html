@@ -1,4 +1,16 @@
 <div class="mt-6">
+    {% if es_dueno %}
+        <div class="mb-4 flex justify-end">
+            <a href="{% url 'projects:project_gallery_edit' proyecto.pk %}"
+               class="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-white px-4 py-2 text-sm font-semibold text-violet-700 shadow-sm transition-colors hover:bg-violet-50">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4">
+                    <path fill-rule="evenodd" d="M10.5 3.75a6 6 0 0 0-5.98 6.496A5.25 5.25 0 0 0 6.75 20.25H18a4.5 4.5 0 0 0 2.206-8.423 3.75 3.75 0 0 0-4.124-3.77 6.002 6.002 0 0 0-5.582-4.307Zm3.75 6.75a.75.75 0 0 0-1.5 0v2.25H10.5a.75.75 0 0 0 0 1.5h2.25v2.25a.75.75 0 0 0 1.5 0v-2.25h2.25a.75.75 0 0 0 0-1.5h-2.25V10.5Z" clip-rule="evenodd"/>
+                </svg>
+                Editar galería
+            </a>
+        </div>
+    {% endif %}
+
     {% if prototipos %}
         <div class="grid grid-cols-2 gap-4">
             {% for prototipo in prototipos %}

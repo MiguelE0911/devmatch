@@ -2,7 +2,13 @@ from django import forms
 
 from apps.accounts.models import Habilidad, Tecnologia
 
-from .models import Proyecto, Vacante, VacanteHabilidadRequerida, VacanteTecnologiaRequerida
+from .models import (
+    Proyecto,
+    ProyectoMedia,
+    Vacante,
+    VacanteHabilidadRequerida,
+    VacanteTecnologiaRequerida,
+)
 
 
 class InputClassesMixin:
@@ -53,6 +59,77 @@ class ProyectoForm(InputClassesMixin, forms.ModelForm):
             "descripcion": "Descripción",
             "logo_url": "URL del logo",
         }
+
+
+class ProyectoMediaForm(InputClassesMixin, forms.ModelForm):
+    """Alta de una imagen de la galería (tipo `prototipo`).
+
+    Espejo de `VacanteForm`. La "subida" es una URL en `archivo_url` (columna
+    TEXT del esquema), igual que `logo_url` — el procesado real de archivos
+    con Pillow llega como valor agregado (spec, CR carga de imágenes v1.0).
+    `orden` controla la posición en la galería; vacío = se agrega al final.
+    `tipo` no se ofrece al usuario: el editor de galería es solo de prototipos.
+    """
+
+    archivo_url = forms.CharField(
+        label="URL de la imagen",
+        widget=forms.TextInput(
+            attrs={
+                "placeholder": "https://...  o /media/...  (URL de la captura)",
+                "class": InputClassesMixin.input_cls,
+            }
+        ),
+    )
+
+    orden = forms.IntegerField(
+        label="Orden (opcional)",
+        required=False,
+        min_value=0,
+        widget=forms.NumberInput(
+            attrs={
+                "min": 0,
+                "class": "w-32 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100",
+            }
+        ),
+    )
+
+    class Meta:
+        model = ProyectoMedia
+        fields = ["archivo_url", "orden"]
+
+    def __init__(self, *args, proyecto=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.proyecto = proyecto
+        if proyecto is not None:
+            self.fields["orden"].initial = self._siguiente_orden()
+
+    def _siguiente_orden(self):
+        ordenes = self.proyecto.media.filter(
+            tipo=ProyectoMedia.TIPO_PROTOTIPO
+        ).values_list("orden", flat=True)
+        return (max(ordenes) if ordenes else -1) + 1
+
+    def clean_archivo_url(self):
+        url = (self.cleaned_data.get("archivo_url") or "").strip()
+        if not url:
+            raise forms.ValidationError("Ingresá la URL de la imagen.")
+        if not (
+            url.startswith("http://")
+            or url.startswith("https://")
+            or url.startswith("/")
+        ):
+            raise forms.ValidationError(
+                "La URL debe empezar con http(s):// o / (ruta de media)."
+            )
+        return url
+
+    def save(self, commit=True):
+        media = super().save(commit=False)
+        if media.orden is None:
+            media.orden = self._siguiente_orden()
+        if commit:
+            media.save()
+        return media
 
 
 class ChipCheckboxSelectMultiple(forms.CheckboxSelectMultiple):

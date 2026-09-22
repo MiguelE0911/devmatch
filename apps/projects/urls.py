@@ -35,4 +35,19 @@ urlpatterns = [
         views.VacancyDeleteView.as_view(),
         name="vacancy_delete",
     ),
+    path(
+        "proyectos/<int:pk>/galeria/editar/",
+        views.ProyectoGaleriaEditView.as_view(),
+        name="project_gallery_edit",
+    ),
+    path(
+        "proyectos/media/<int:pk>/eliminar/",
+        views.ProyectoMediaDeleteView.as_view(),
+        name="media_delete",
+    ),
+    path(
+        "proyectos/<int:pk>/galeria/ordenar/",
+        views.ProyectoMediaReorderView.as_view(),
+        name="media_reorder",
+    ),
 ]

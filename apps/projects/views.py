@@ -1,12 +1,16 @@
+import json
+
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db import transaction
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.utils import timezone
 from django.views import View
 from django.views.generic import CreateView, DetailView, UpdateView
 
-from .forms import ProyectoForm, VacanteForm
+from .forms import ProyectoForm, ProyectoMediaForm, VacanteForm
 from .models import Proyecto, ProyectoMedia, Vacante
 
 
@@ -294,12 +298,153 @@ class VacancyDeleteView(LoginRequiredMixin, View):
         vacante.save()
 
         messages.success(
-            request, f"La vacante «{vacante.titulo}» se desactivó correctamente."
+            request, f"La vacante «{vacante.titulo}» se eliminó."
         )
         return redirect(
             reverse("projects:project_detail", kwargs={"pk": proyecto.pk})
             + "?tab=vacantes"
         )
+
+
+class ProyectoGaleriaEditView(LoginRequiredMixin, CreateView):
+    """Editor de la galería del proyecto (imágenes tipo `prototipo`).
+
+    Espejo de `VacancyCreateView`: la página combina el form de alta de una
+    imagen (por URL, sin Pillow todavía) con la lista de imágenes activas y su
+    acción de desactivar. La "subida" es una URL en `archivo_url` (TEXT), igual
+    que `logo_url` — el procesado con Pillow llega como valor agregado.
+    """
+
+    form_class = ProyectoMediaForm
+    template_name = "projects/gallery_form.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        self.proyecto = get_object_or_404(
+            Proyecto.objects.filter(es_activo=True), pk=kwargs["pk"]
+        )
+        if request.user.id != self.proyecto.creador_id:
+            messages.error(
+                request, "Solo el creador del proyecto puede editar la galería."
+            )
+            return redirect("projects:project_detail", pk=self.proyecto.pk)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["proyecto"] = self.proyecto
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["proyecto"] = self.proyecto
+        ctx["es_dueno"] = True
+        ctx["estado_badge"] = badge_estado(self.proyecto)
+        ctx.update(datos_laterales(self.proyecto, self.request.user))
+        return ctx
+
+    def form_valid(self, form):
+        form.instance.proyecto = self.proyecto
+        form.instance.tipo = ProyectoMedia.TIPO_PROTOTIPO
+        form.instance.es_activo = True
+        messages.success(self.request, "La imagen se subió correctamente.")
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return (
+            reverse("projects:project_detail", kwargs={"pk": self.proyecto.pk})
+            + "?tab=galeria"
+        )
+
+
+class ProyectoMediaDeleteView(LoginRequiredMixin, View):
+    """"Desactivar" una imagen de la galería: es_activo=False (no hay DELETE físico).
+
+    Espejo de `VacancyDeleteView`. A diferencia de proyectos/vacantes,
+    proyecto_media no tiene desactivado_en/desactivado_por_id (es un adjunto,
+    ver DevMatch-BD, 5.2), así que basta con es_activo=False.
+    """
+
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        media = get_object_or_404(
+            ProyectoMedia.objects.select_related("proyecto__creador").filter(
+                es_activo=True
+            ),
+            pk=pk,
+        )
+        proyecto = media.proyecto
+        if request.user.id != proyecto.creador_id:
+            messages.error(
+                request, "Solo el creador del proyecto puede desactivar imágenes."
+            )
+            return redirect("projects:project_detail", pk=proyecto.pk)
+
+        media.es_activo = False
+        media.save()
+
+        messages.success(
+            request, "La imagen se eliminó de la galería."
+        )
+        return redirect(
+            reverse("projects:project_detail", kwargs={"pk": proyecto.pk})
+            + "?tab=galeria"
+        )
+
+
+class ProyectoMediaReorderView(LoginRequiredMixin, View):
+    """Reordenar la galería (imágenes tipo `prototipo` activas) de un proyecto.
+
+    Endpoint AJAX (POST JSON): recibe `{"ids": [...]}` con el orden completo de
+    la galería y reetiqueta `orden` = índice para cada imagen dentro de un
+    `transaction.atomic()`. La lista debe coincidir exactamente con las
+    imágenes activas del proyecto; las desactivadas no participan y conservan
+    su `orden`. Es un UPDATE normal, no aplica `fn_prevenir_borrado_fisico`.
+    """
+
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        proyecto = get_object_or_404(
+            Proyecto.objects.filter(es_activo=True), pk=pk
+        )
+        if request.user.id != proyecto.creador_id:
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "error": "Solo el creador del proyecto puede reordenar la galería.",
+                },
+                status=403,
+            )
+
+        try:
+            data = json.loads(request.body or b"{}")
+        except json.JSONDecodeError:
+            return JsonResponse({"ok": False, "error": "JSON inválido."}, status=400)
+
+        ids = data.get("ids")
+        if not isinstance(ids, list) or not ids:
+            return JsonResponse(
+                {"ok": False, "error": "Falta la lista de ids."}, status=400
+            )
+
+        activas = proyecto.media.filter(
+            tipo=ProyectoMedia.TIPO_PROTOTIPO, es_activo=True
+        )
+        activas_ids = set(activas.values_list("pk", flat=True))
+        if set(ids) != activas_ids:
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "error": "La lista no coincide con las imágenes activas.",
+                },
+                status=400,
+            )
+
+        with transaction.atomic():
+            for posicion, media_id in enumerate(ids):
+                activas.filter(pk=media_id).update(orden=posicion)
+        return JsonResponse({"ok": True, "ids": ids})
 
 
 class ProyectoEditView(LoginRequiredMixin, UpdateView):
@@ -325,6 +470,7 @@ class ProyectoEditView(LoginRequiredMixin, UpdateView):
         ctx = super().get_context_data(**kwargs)
         ctx["es_dueno"] = True
         ctx["estado_badge"] = badge_estado(self.object)
+        ctx.update(datos_laterales(self.object, self.request.user))
         return ctx
 
     def form_valid(self, form):
@@ -363,7 +509,7 @@ class ProyectoDeleteView(LoginRequiredMixin, View):
         # TODO audit: cuando exista apps/audit (services.py:log_action), registrar
         # "proyecto.desactivado" — DEVMATCH-BD 8.5 lo exige y nadie más lo loguea.
         messages.success(
-            request, f"El proyecto «{proyecto.nombre}» se desactivó correctamente."
+            request, f"El proyecto «{proyecto.nombre}» se eliminó."
         )
         # No hay home interno todavía: el listado propio llega en una etapa posterior.
         return redirect("core:home")
