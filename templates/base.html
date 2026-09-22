@@ -11,16 +11,18 @@
 <body class="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
     {% block topbar %}{% include "partials/topbar.html" %}{% endblock %}
 
-    <div class="flex flex-1">
+    <div class="flex min-h-screen flex-1">
         {% block sidebar %}{% include "partials/sidebar.html" %}{% endblock %}
 
-        <main class="flex-1 w-full max-w-5xl mx-auto px-4 py-8">
-            {% include "partials/alerts.html" %}
-            {% block content %}{% endblock %}
-        </main>
-    </div>
+        <div class="flex min-w-0 flex-1 flex-col">
+            <main class="flex-1 w-full max-w-5xl mx-auto px-4 py-8">
+                {% include "partials/alerts.html" %}
+                {% block content %}{% endblock %}
+            </main>
 
-    {% include "partials/footer.html" %}
+            {% include "partials/footer.html" %}
+        </div>
+    </div>
 
     {% block extra_scripts %}{% endblock %}
 </body>

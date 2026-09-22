@@ -1,0 +1,29 @@
+<div class="mt-6">
+    {% if prototipos %}
+        <div class="grid grid-cols-2 gap-4">
+            {% for prototipo in prototipos %}
+                <div class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+                    <div class="aspect-video w-full">
+                        <img src="{{ prototipo.archivo_url }}" alt="Prototipo de {{ proyecto.nombre }}"
+                             class="h-full w-full object-cover">
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="grid grid-cols-2 gap-4">
+            {% for _ in "1234" %}
+                <div class="overflow-hidden rounded-3xl shadow-sm">
+                    <div class="flex aspect-video w-full items-center justify-center bg-placeholder-gray">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-9 w-9 text-slate-400">
+                            <path fill-rule="evenodd" d="M10.5 3.75a6 6 0 0 0-5.98 6.496A5.25 5.25 0 0 0 6.75 20.25H18a4.5 4.5 0 0 0 2.206-8.423 3.75 3.75 0 0 0-4.124-3.77 6.002 6.002 0 0 0-5.582-4.307Z" clip-rule="evenodd"/>
+                        </svg>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+        <p class="mt-3 text-center text-xs font-medium text-slate-400">
+            No hay capturas del prototipo cargadas todavía.
+        </p>
+    {% endif %}
+</div>

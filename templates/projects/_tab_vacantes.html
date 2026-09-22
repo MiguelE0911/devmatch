@@ -1,0 +1,101 @@
+<div class="mt-8 space-y-6">
+    {% if vacantes %}
+        {% for vacante in vacantes %}
+            <article class="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+                <div class="flex items-start gap-7">
+                    {# Estado del cupo: UN solo ícono (evita la repetición visual). #}
+                    <div class="flex w-14 shrink-0 flex-col items-center gap-2">
+                        {% if vacante.cupos_libres > 0 %}
+                            <div class="flex h-11 w-11 items-center justify-center rounded-full bg-violet-100 text-base font-bold text-violet-700"
+                                 title="{{ vacante.cupos_libres }} cupos disponibles">
+                                <span>?</span>
+                            </div>
+                            <span class="text-[10px] font-semibold text-slate-400">{{ vacante.cupos_libres }} disp.</span>
+                        {% else %}
+                            <div class="flex h-11 w-11 items-center justify-center rounded-full bg-gray-700 text-white"
+                                 title="Vacante completa">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-5 w-5">
+                                    <path fill-rule="evenodd" d="M7.5 6a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM3.751 20.105a8.25 8.25 0 0 1 16.498 0 .75.75 0 0 1-.437.695A18.683 18.683 0 0 1 12 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 0 1-.437-.695Z" clip-rule="evenodd"/>
+                                </svg>
+                            </div>
+                            <span class="text-[10px] font-semibold text-slate-400">Completa</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-start justify-between gap-4">
+                            <h3 class="text-xl font-bold text-slate-900">{{ vacante.titulo }}</h3>
+                            <span class="shrink-0 rounded-full bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">
+                                {{ vacante.cupos_ocupados }}/{{ vacante.cupos_totales }} cupos
+                            </span>
+                        </div>
+                        <p class="mt-3 line-clamp-3 text-sm leading-relaxed text-slate-600">{{ vacante.descripcion }}</p>
+
+                        <div class="mt-5 h-1.5 overflow-hidden rounded-full bg-violet-100">
+                            <div class="h-full rounded-full bg-violet-700" style="width: {{ vacante.pct_ocupado }}%"></div>
+                        </div>
+
+                        {% if vacante.habilidades or vacante.tecnologias %}
+                            <div class="mt-6 space-y-2.5">
+                                {% if vacante.habilidades %}
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-3.5 w-3.5 text-violet-700">
+                                            <path fill-rule="evenodd" d="M14.615 1.595a.75.75 0 0 1 .359.852L12.982 9.75h7.268a.75.75 0 0 1 .548 1.262l-10.5 11.25a.75.75 0 0 1-1.272-.71l1.992-7.302H3.75a.75.75 0 0 1-.548-1.262l10.5-11.25a.75.75 0 0 1 .913-.143Z" clip-rule="evenodd"/>
+                                        </svg>
+                                        {% for habilidad in vacante.habilidades %}
+                                            <span class="rounded-full border border-violet-100 bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700">{{ habilidad.nombre }}</span>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                                {% if vacante.tecnologias %}
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-3.5 w-3.5 text-violet-700">
+                                            <path fill-rule="evenodd" d="M2.25 5.25a3 3 0 0 1 3-3h13.5a3 3 0 0 1 3 3V15a3 3 0 0 1-3 3h-13.5a3 3 0 0 1-3-3V5.25Zm15 5.25a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm-1.5 3a.75.75 0 0 0 .75.75h3a.75.75 0 0 0 0-1.5h-3a.75.75 0 0 0-.75.75ZM6.3 6.22a.75.75 0 0 0-1.06 1.06L7.44 9.5 5.24 11.72a.75.75 0 1 0 1.06 1.06l2.75-2.75a.75.75 0 0 0 0-1.06L6.3 6.22Zm3 3a.75.75 0 0 0 0 1.06l2.75 2.75a.75.75 0 1 0 1.06-1.06L10.35 9.5l2.76-2.72a.75.75 0 0 0-1.06-1.06L9.3 8.94Z" clip-rule="evenodd"/>
+                                        </svg>
+                                        {% for tecnologia in vacante.tecnologias %}
+                                            <span class="rounded-full border border-violet-100 bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700">{{ tecnologia.nombre }}</span>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="mt-8 flex justify-end">
+                    {% if vacante.puede_postularse %}
+                        {# TODO Etapa 2: vincular con la postulación real (POST a apps/applications). #}
+                        <button type="button" title="Disponible en la Etapa 2"
+                                class="inline-flex items-center gap-2 rounded-full bg-violet-700 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-violet-800">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4">
+                                <path fill-rule="evenodd" d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" clip-rule="evenodd"/>
+                            </svg>
+                            Postularme
+                        </button>
+                    {% else %}
+                        <button type="button" disabled title="{% if es_dueno %}Eres el creador de este proyecto{% else %}Publicación completa{% endif %}"
+                                class="inline-flex cursor-not-allowed items-center gap-2 rounded-full bg-app-disabled px-6 py-3 text-sm font-semibold text-white">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4">
+                                <path fill-rule="evenodd" d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" clip-rule="evenodd"/>
+                            </svg>
+                            Postularme
+                        </button>
+                    {% endif %}
+                </div>
+            </article>
+        {% endfor %}
+    {% else %}
+        <div class="rounded-3xl border border-slate-200 bg-white p-10 text-center shadow-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="mx-auto h-8 w-8 text-slate-300">
+                <path d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z"/>
+            </svg>
+            <p class="mt-3 text-sm font-semibold text-slate-700">Aún no hay vacantes publicadas</p>
+            {% if es_dueno %}
+                <a href="{% url 'projects:vacancy_create' proyecto.pk %}"
+                   class="mt-4 inline-flex rounded-full bg-violet-700 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-violet-800">
+                    + Añadir la primera vacante
+                </a>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
