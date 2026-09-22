@@ -12,7 +12,7 @@ urlpatterns = [
         LoginView.as_view(
             template_name="accounts/login.html",
             authentication_form=LoginForm,
-            next_page="core:home",
+            next_page="core:feed",
         ),
         name="login",
     ),

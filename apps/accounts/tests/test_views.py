@@ -39,21 +39,21 @@ class LoginViewTests(TestCase):
             reverse("accounts:login"),
             {"username": "login@devmatch.test", "password": "Clave-Segura-99!"},
         )
-        self.assertRedirects(resp, reverse("core:home"))
+        self.assertRedirects(resp, reverse("core:feed"))
 
     def test_login_por_username_redirige_al_home(self):
         resp = self.client.post(
             reverse("accounts:login"),
             {"username": "login_user", "password": "Clave-Segura-99!"},
         )
-        self.assertRedirects(resp, reverse("core:home"))
+        self.assertRedirects(resp, reverse("core:feed"))
 
     def test_login_por_username_insensible_a_mayusculas(self):
         resp = self.client.post(
             reverse("accounts:login"),
             {"username": "  LOGIN_User ", "password": "Clave-Segura-99!"},
         )
-        self.assertRedirects(resp, reverse("core:home"))
+        self.assertRedirects(resp, reverse("core:feed"))
         self.assertTrue(resp.wsgi_request.user.is_authenticated)
 
     def test_login_incorrecto_no_redirige(self):
