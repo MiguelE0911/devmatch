@@ -5,6 +5,12 @@ from . import views
 app_name = "projects"
 
 urlpatterns = [
+
+    path(
+        "proyectos/crear/",
+        views.ProyectoCreateView.as_view(),
+        name="project_create",
+    ),
     path(
         "proyectos/<int:pk>/",
         views.ProyectoDetailView.as_view(),

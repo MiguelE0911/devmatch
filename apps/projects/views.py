@@ -513,3 +513,19 @@ class ProyectoDeleteView(LoginRequiredMixin, View):
         )
         # No hay home interno todavía: el listado propio llega en una etapa posterior.
         return redirect("core:home")
+
+class ProyectoCreateView(LoginRequiredMixin, CreateView):
+    """Creación de un nuevo proyecto desde el modal."""
+
+    model = Proyecto
+    form_class = ProyectoForm
+    template_name = "projects/project_create.html"
+
+    def form_valid(self, form):
+        form.instance.creador = self.request.user
+        form.instance.es_activo = True
+        messages.success(self.request, "¡Proyecto creado exitosamente!")
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse("projects:project_detail", kwargs={"pk": self.object.pk})
