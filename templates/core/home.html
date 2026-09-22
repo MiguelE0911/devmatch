@@ -492,8 +492,7 @@
                     <p class="mt-4 leading-relaxed text-ink">
                         Crea tu perfil técnico y descubre qué proyectos encajan mejor con lo que sabes hacer.
                     </p>
-                    {% comment %}TODO Squad B: {% url 'accounts:register' %} cuando existan las vistas (Etapa 1){% endcomment %}
-                    <a href="#"
+                    <a href="{% url 'accounts:register' %}"
                        class="mt-8 block rounded-full border-2 border-violet-700 px-7 py-3 text-center text-sm font-bold text-violet-700 transition-colors hover:bg-violet-700 hover:text-white sm:inline-block">
                         Crear mi cuenta
                     </a>
