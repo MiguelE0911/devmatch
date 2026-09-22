@@ -1,0 +1,77 @@
+{% comment %}
+Frame de las pantallas de autenticación (Login/Registro).
+
+Página STANDALONE a viewport completo, como la landing (NO extiende
+base.html del shell): fondo paper, tarjeta blanca centrada y sin
+navbar/sidebar/footer. El "header" (logotipo + bloque) y el "footer de
+enlace" van en cada página hija vía block del contenido.
+
+El logotipo reutiliza el mismo estilo bicolor del navbar/footer de la
+app (DEV violet-400 + MATCH violet-700), no negro sólido — decisión del
+equipo que reemplaza la recomendación de negro de la spec visual.
+{% endcomment %}
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    {% block head %}
+        {% include "core/_head.html" with title="DevMatch — Cuenta" %}
+    {% endblock %}
+</head>
+<body class="min-h-screen bg-paper font-montserrat text-ink antialiased">
+    <main class="flex min-h-screen items-center justify-center px-4 py-10 sm:px-6">
+        <div class="w-full max-w-[618px] rounded-[20px] bg-white px-6 py-10 shadow-card sm:px-12">
+            <p class="text-center text-3xl font-extrabold tracking-tight sm:text-[32px]">
+                <a href="{% url 'core:home' %}">
+                    <span class="text-violet-400">DEV</span><span class="text-violet-700">MATCH</span>
+                </a>
+            </p>
+            {% block auth_content %}{% endblock %}
+        </div>
+    </main>
+
+    <script>
+        (function () {
+            var botones = document.querySelectorAll("[data-toggle-password]");
+            botones.forEach(function (boton) {
+                if (boton.dataset.iniciado) {
+                    return;
+                }
+                boton.dataset.iniciado = "1";
+                var input = document.getElementById(boton.dataset.target);
+                var iconoVer = boton.querySelector("[data-icon-ver]");
+                var iconoOcultar = boton.querySelector("[data-icon-ocultar]");
+                if (!input) {
+                    return;
+                }
+                function mostrar(visible) {
+                    input.type = visible ? "text" : "password";
+                    if (iconoVer && iconoOcultar) {
+                        iconoVer.classList.toggle("hidden", visible);
+                        iconoOcultar.classList.toggle("hidden", !visible);
+                    }
+                    boton.setAttribute("aria-label", visible ? "Ocultar contraseña" : "Mostrar contraseña");
+                }
+                boton.addEventListener("pointerdown", function (e) {
+                    e.preventDefault();
+                    mostrar(true);
+                });
+                boton.addEventListener("pointerup", function () {
+                    mostrar(false);
+                });
+                boton.addEventListener("pointerleave", function () {
+                    mostrar(false);
+                });
+                boton.addEventListener("pointercancel", function () {
+                    mostrar(false);
+                });
+                boton.addEventListener("blur", function () {
+                    mostrar(false);
+                });
+            });
+        })();
+    </script>
+
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>
