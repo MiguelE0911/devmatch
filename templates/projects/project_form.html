@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Editar {{ proyecto.nombre }} — DevMatch{% endblock %}
+
+{% block content %}
+<div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+    <div class="min-w-0 space-y-5">
+        {% include "projects/_proyecto_encabezado.html" with con_descripcion=False %}
+
+        <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 class="text-lg font-bold text-slate-900">Editar proyecto</h2>
+            <p class="mt-1 text-sm text-slate-500">
+                Actualizá la información general del proyecto.
+            </p>
+
+            <form method="post" class="mt-6 space-y-6">
+                {% csrf_token %}
+                {{ form.non_field_errors }}
+
+                <div>
+                    <label for="{{ form.nombre.id_for_label }}" class="mb-1.5 block text-sm font-semibold text-slate-800">
+                        {{ form.nombre.label }}
+                    </label>
+                    {{ form.nombre }}
+                    {{ form.nombre.errors }}
+                </div>
+
+                <div>
+                    <label for="{{ form.descripcion.id_for_label }}" class="mb-1.5 block text-sm font-semibold text-slate-800">
+                        {{ form.descripcion.label }}
+                    </label>
+                    {{ form.descripcion }}
+                    {{ form.descripcion.errors }}
+                </div>
+
+                <div>
+                    <label for="{{ form.logo_url.id_for_label }}" class="mb-1.5 block text-sm font-semibold text-slate-800">
+                        {{ form.logo_url.label }}
+                    </label>
+                    {{ form.logo_url }}
+                    <p class="mt-1.5 text-xs text-slate-500">
+                        Si dejás el campo vacío se muestra el ícono genérico del proyecto.
+                    </p>
+                    {{ form.logo_url.errors }}
+                </div>
+
+                <div class="flex items-center justify-end gap-3">
+                    <a href="{% url 'projects:project_detail' proyecto.pk %}"
+                       class="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50">
+                        Cancelar
+                    </a>
+                    <button type="submit"
+                            class="inline-flex items-center gap-2 rounded-full bg-violet-700 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-violet-800">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4">
+                            <path fill-rule="evenodd" d="M4.5 12.75a.75.75 0 0 1 .75-.75h13.5a.75.75 0 0 1 0 1.5H5.25a.75.75 0 0 1-.75-.75ZM4.5 8.25A.75.75 0 0 1 5.25 7.5h13.5a.75.75 0 0 1 0 1.5H5.25a.75.75 0 0 1-.75-.75ZM4.5 4.5a.75.75 0 0 1 .75-.75h13.5a.75.75 0 0 1 0 1.5H5.25a.75.75 0 0 1-.75-.75ZM4.5 17.25a.75.75 0 0 1 .75-.75h7.5a.75.75 0 0 1 0 1.5h-7.5a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd"/>
+                        </svg>
+                        Guardar cambios
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <aside class="space-y-5">
+        {% include "projects/_requisitos.html" %}
+        {% include "projects/_equipo.html" %}
+    </aside>
+</div>
+{% endblock content %}

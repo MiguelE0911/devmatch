@@ -3,6 +3,7 @@ module.exports = {
   content: [
     "./templates/**/*.html",
     "./apps/**/templates/**/*.html",
+    "./apps/**/*.py",
   ],
   theme: {
     extend: {
@@ -21,6 +22,11 @@ module.exports = {
         /* Claro y tinta de la paleta declarada */
         paper: "#F5F9FA",
         ink: "#3A455B",
+        /* Shell interno (app, no landing) — ver DEVMATCH-DESIGN sección de detalle de proyecto */
+        "app-navbar": "#333074",   /* navbar superior interna */
+        "app-search": "#5B56A5",   /* fondo del buscador interno */
+        "app-disabled": "#C4A7EF", /* botones "Postularme" deshabilitados */
+        "placeholder-gray": "#E3E3E3", /* celdas vacías de la Galería */
       },
       boxShadow: {
         "hero": "0 40px 80px -20px rgba(91, 33, 198, 0.55)",
