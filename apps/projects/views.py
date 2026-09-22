@@ -3,9 +3,10 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.utils import timezone
-from django.views.generic import CreateView, DetailView
+from django.views import View
+from django.views.generic import CreateView, DetailView, UpdateView
 
-from .forms import VacanteForm
+from .forms import ProyectoForm, VacanteForm
 from .models import Proyecto, ProyectoMedia
 
 
@@ -197,3 +198,70 @@ class VacancyCreateView(LoginRequiredMixin, CreateView):
             reverse("projects:project_detail", kwargs={"pk": self.proyecto.pk})
             + "?tab=vacantes"
         )
+
+
+class ProyectoEditView(LoginRequiredMixin, UpdateView):
+    """Edición de los datos del proyecto. Solo el creador (dueño)."""
+
+    model = Proyecto
+    form_class = ProyectoForm
+    template_name = "projects/project_form.html"
+    pk_url_kwarg = "pk"
+    context_object_name = "proyecto"
+
+    def get_queryset(self):
+        return Proyecto.objects.select_related("creador").filter(es_activo=True)
+
+    def dispatch(self, request, *args, **kwargs):
+        proyecto = get_object_or_404(self.get_queryset(), pk=kwargs["pk"])
+        if request.user.id != proyecto.creador_id:
+            messages.error(request, "Solo el creador del proyecto puede editarlo.")
+            return redirect("projects:project_detail", pk=proyecto.pk)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["es_dueno"] = True
+        ctx["estado_badge"] = badge_estado(self.object)
+        return ctx
+
+    def form_valid(self, form):
+        messages.success(self.request, "Proyecto actualizado correctamente.")
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse("projects:project_detail", kwargs={"pk": self.object.pk})
+
+
+class ProyectoDeleteView(LoginRequiredMixin, View):
+    """"Desactivar" un proyecto: es_activo=False (no hay DELETE físico).
+
+    Per contrato de honestidad del esquema v1, no existe estado 'archivado' ni
+    borrado físico (trigger fn_prevenir_borrado_fisico). La acción es un UPDATE
+    ortogonal: se oculta de la interfaz conservando su historial.
+    """
+
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        proyecto = get_object_or_404(
+            Proyecto.objects.filter(es_activo=True), pk=pk
+        )
+        if request.user.id != proyecto.creador_id:
+            messages.error(
+                request, "Solo el creador del proyecto puede desactivarlo."
+            )
+            return redirect("projects:project_detail", pk=proyecto.pk)
+
+        proyecto.es_activo = False
+        proyecto.desactivado_en = timezone.now()
+        proyecto.desactivado_por = request.user
+        proyecto.save()
+
+        # TODO audit: cuando exista apps/audit (services.py:log_action), registrar
+        # "proyecto.desactivado" — DEVMATCH-BD 8.5 lo exige y nadie más lo loguea.
+        messages.success(
+            request, f"El proyecto «{proyecto.nombre}» se desactivó correctamente."
+        )
+        # No hay home interno todavía: el listado propio llega en una etapa posterior.
+        return redirect("core:home")

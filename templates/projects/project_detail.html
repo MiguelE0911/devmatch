@@ -59,6 +59,38 @@
                 activar(boton.dataset.tab);
             });
         });
+
+        var contenedorMenu = document.querySelector("[data-menu]");
+        if (contenedorMenu) {
+            var toggle = contenedorMenu.querySelector("[data-menu-toggle]");
+            var panel = contenedorMenu.querySelector("[data-menu-panel]");
+
+            toggle.addEventListener("click", function (e) {
+                e.stopPropagation();
+                var abierto = panel.classList.toggle("hidden") === false;
+                toggle.setAttribute("aria-expanded", String(abierto));
+            });
+
+            document.addEventListener("click", function () {
+                panel.classList.add("hidden");
+                toggle.setAttribute("aria-expanded", "false");
+            });
+
+            panel.querySelectorAll("[role='menuitem']").forEach(function (item) {
+                item.addEventListener("click", function () {
+                    panel.classList.add("hidden");
+                });
+            });
+
+            var formDelete = contenedorMenu.querySelector("form[data-confirm]");
+            if (formDelete) {
+                formDelete.addEventListener("submit", function (e) {
+                    if (!window.confirm(formDelete.dataset.confirm)) {
+                        e.preventDefault();
+                    }
+                });
+            }
+        }
     })();
 </script>
 {% endblock extra_scripts %}

@@ -2,7 +2,57 @@ from django import forms
 
 from apps.accounts.models import Habilidad, Tecnologia
 
-from .models import Vacante, VacanteHabilidadRequerida, VacanteTecnologiaRequerida
+from .models import Proyecto, Vacante, VacanteHabilidadRequerida, VacanteTecnologiaRequerida
+
+
+class InputClassesMixin:
+    """Clases uniformes para los inputs del shell interno."""
+
+    input_cls = (
+        "w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 "
+        "text-sm text-slate-900 placeholder-slate-400 focus:border-violet-500 "
+        "focus:outline-none focus:ring-2 focus:ring-violet-100"
+    )
+
+
+class ProyectoForm(InputClassesMixin, forms.ModelForm):
+    """Edición de los datos básicos del proyecto (solo el creador).
+
+    `estado` no se edita aquí a propósito: las transiciones las valida el
+    trigger `fn_validar_transicion_proyecto` y se gestionan aparte (toggle
+    de estados válidos) para no chocar con la máquina de estados.
+    `logo_url` y la galería viven en `proyecto_media`/`logo_url` (TEXT).
+    """
+
+    class Meta:
+        model = Proyecto
+        fields = ["nombre", "descripcion", "logo_url"]
+        widgets = {
+            "nombre": forms.TextInput(
+                attrs={
+                    "placeholder": "Nombre del proyecto",
+                    "class": InputClassesMixin.input_cls,
+                }
+            ),
+            "descripcion": forms.Textarea(
+                attrs={
+                    "rows": 5,
+                    "placeholder": "Contá de qué trata el proyecto...",
+                    "class": InputClassesMixin.input_cls,
+                }
+            ),
+            "logo_url": forms.TextInput(
+                attrs={
+                    "placeholder": "https://...  (URL del logo, opcional)",
+                    "class": InputClassesMixin.input_cls,
+                }
+            ),
+        }
+        labels = {
+            "nombre": "Nombre del proyecto",
+            "descripcion": "Descripción",
+            "logo_url": "URL del logo",
+        }
 
 
 class ChipCheckboxSelectMultiple(forms.CheckboxSelectMultiple):
