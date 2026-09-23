@@ -1,4 +1,5 @@
 from django import forms
+from django.utils import timezone
 
 from apps.accounts.models import Habilidad, Tecnologia
 
@@ -9,6 +10,7 @@ from .models import (
     VacanteHabilidadRequerida,
     VacanteTecnologiaRequerida,
 )
+from .services import TRANSICIONES_VALIDAS
 
 
 class InputClassesMixin:
@@ -24,9 +26,13 @@ class InputClassesMixin:
 class ProyectoForm(InputClassesMixin, forms.ModelForm):
     """Edición de los datos básicos del proyecto (solo el creador).
 
-    `estado` no se edita aquí a propósito: las transiciones las valida el
-    trigger `fn_validar_transicion_proyecto` y se gestionan aparte (toggle
-    de estados válidos) para no chocar con la máquina de estados.
+    `estado` se edita solo aquí, igual que la vacante en edición: el select
+    ofrece únicamente el estado actual y las transiciones válidas según
+    `services.TRANSICIONES_VALIDAS` (espejo del trigger
+    `fn_validar_transicion_proyecto`). `clean_estado` valida como antemural
+    para no depender del error crudo de Postgres; el trigger sigue siendo la
+    garantía final. Al finalizar o cancelar se registran `finalizado_en` /
+    `cancelado_en`, igual que hacen el servicio y el trigger.
     `logo_url` y la galería viven en `proyecto_media`/`logo_url` (TEXT).
     """
 
@@ -59,6 +65,62 @@ class ProyectoForm(InputClassesMixin, forms.ModelForm):
             "descripcion": "Descripción",
             "logo_url": "URL del logo",
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._estado_original = (
+            self.instance.estado if self.instance.pk else Proyecto.ESTADO_BORRADOR
+        )
+        permitidos = TRANSICIONES_VALIDAS.get(self._estado_original, set())
+        # `cancelado` NO se ofrece como opción editable: es el estado que se le
+        # asigna automáticamente al dueño cuando intenta borrar el proyecto
+        # (lo aplica `ProyectoDeleteView`). Solo aparece en el select si ya es
+        # el estado actual del proyecto (p. ej. al cancelar un borrado).
+        opciones = ({self._estado_original} | permitidos) - {
+            Proyecto.ESTADO_CANCELADO
+        }
+        if self._estado_original == Proyecto.ESTADO_CANCELADO:
+            opciones.add(Proyecto.ESTADO_CANCELADO)
+        self.fields["estado"] = forms.ChoiceField(
+            choices=[
+                (valor, etiqueta)
+                for valor, etiqueta in Proyecto.ESTADO_CHOICES
+                if valor in opciones
+            ],
+            initial=self._estado_original,
+            label="Estado del proyecto",
+            widget=forms.Select(
+                attrs={
+                    "class": "w-64 appearance-none rounded-xl border border-slate-300 bg-white py-2.5 pl-9 pr-10 text-sm font-medium text-slate-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100",
+                }
+            ),
+        )
+
+    def clean_estado(self):
+        nuevo_estado = self.cleaned_data.get("estado")
+        if not self.instance.pk or nuevo_estado == self._estado_original:
+            return nuevo_estado
+        if nuevo_estado not in TRANSICIONES_VALIDAS.get(self._estado_original, set()):
+            etiquetas = dict(Proyecto.ESTADO_CHOICES)
+            raise forms.ValidationError(
+                f"No se puede pasar el proyecto de "
+                f"'{etiquetas.get(self._estado_original)}' a "
+                f"'{etiquetas.get(nuevo_estado)}'."
+            )
+        return nuevo_estado
+
+    def save(self, commit=True):
+        proyecto = super().save(commit=False)
+        nuevo_estado = self.cleaned_data.get("estado")
+        if nuevo_estado and nuevo_estado != self._estado_original:
+            proyecto.estado = nuevo_estado
+            if nuevo_estado == Proyecto.ESTADO_FINALIZADO:
+                proyecto.finalizado_en = timezone.now()
+            elif nuevo_estado == Proyecto.ESTADO_CANCELADO:
+                proyecto.cancelado_en = timezone.now()
+        if commit:
+            proyecto.save()
+        return proyecto
 
 
 class ProyectoMediaForm(InputClassesMixin, forms.ModelForm):
