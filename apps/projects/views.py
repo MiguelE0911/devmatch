@@ -3,7 +3,7 @@ import json
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
-from django.http import JsonResponse
+from django.http import JsonResponse, Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.utils import timezone
@@ -147,6 +147,14 @@ class ProyectoDetailView(DetailView):
     def get_queryset(self):
         return Proyecto.objects.select_related("creador").filter(es_activo=True)
 
+    def get_object(self, queryset=None):
+            proyecto = super().get_object(queryset)
+            
+            if proyecto.estado == Proyecto.ESTADO_BORRADOR and proyecto.creador_id != self.request.user.id:
+                raise Http404("El proyecto no existe o aún es un borrador privado.")
+                
+            return proyecto
+    
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         proyecto = self.object
