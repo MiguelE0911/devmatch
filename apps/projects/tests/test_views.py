@@ -228,3 +228,39 @@ class GaleriaReorderTests(TestCase):
         self.assertEqual(self.ordenes(), [1, 2, 0])
         oculta = ProyectoMedia.objects.get(archivo_url="https://example.com/proto-oculto.png")
         self.assertEqual(oculta.orden, 9)
+
+
+class ProyectoDeleteTests(TestCase):
+    def setUp(self):
+        self.creador = Usuario.objects.create_user(
+            "creador-delete@devmatch.test", "creador-delete", password="Clave-123!"
+        )
+        self.proyecto = Proyecto.objects.create(
+            creador=self.creador, nombre="Demo", descripcion="desc"
+        )
+        self.url = reverse("projects:project_delete", args=[self.proyecto.pk])
+
+    def test_borrar_proyecto_en_reclutando_lo_cancela(self):
+        self.proyecto.estado = Proyecto.ESTADO_RECLUTANDO
+        self.proyecto.save()
+        self.client.force_login(self.creador)
+        resp = self.client.post(self.url)
+        self.assertEqual(resp.status_code, 302)
+        self.proyecto.refresh_from_db()
+        self.assertEqual(self.proyecto.estado, Proyecto.ESTADO_CANCELADO)
+        self.assertIsNotNone(self.proyecto.cancelado_en)
+        self.assertFalse(self.proyecto.es_activo)
+        self.assertIsNotNone(self.proyecto.desactivado_en)
+        self.assertEqual(self.proyecto.desactivado_por, self.creador)
+
+    def test_borrar_proyecto_finalizado_no_cambia_estado_pero_desactiva(self):
+        self.proyecto.estado = Proyecto.ESTADO_FINALIZADO
+        self.proyecto.save()
+        self.client.force_login(self.creador)
+        resp = self.client.post(self.url)
+        self.assertEqual(resp.status_code, 302)
+        self.proyecto.refresh_from_db()
+        self.assertEqual(self.proyecto.estado, Proyecto.ESTADO_FINALIZADO)
+        self.assertFalse(self.proyecto.es_activo)
+        self.assertIsNotNone(self.proyecto.desactivado_en)
+        self.assertEqual(self.proyecto.desactivado_por, self.creador)

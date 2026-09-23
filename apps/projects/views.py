@@ -12,21 +12,24 @@ from django.views.generic import CreateView, DetailView, UpdateView
 
 from .forms import ProyectoForm, ProyectoMediaForm, VacanteForm
 from .models import Proyecto, ProyectoMedia, Vacante
+from .services import TRANSICIONES_VALIDAS
 
 
 TABS = ("vacantes", "descripcion", "galeria")
 TAB_INICIAL = "vacantes"
 
-# Badge de estado de la cabecera: (clases de color, label). "Reclutando" es el
-# único estado con semántica verde (spec); el resto usa violeta/neutral.
+# Badge de estado de la cabecera: (clases de color, label). Cada uno de los 7
+# estados usa un color DIFERENTE (spec: "cada uno con un color diferente").
+# `cancelado` NO se ofrece como opción editable: se le asigna automáticamente
+# al dueño cuando intenta borrar el proyecto (lo aplica `ProyectoDeleteView`).
 ESTADO_BADGE = {
-    Proyecto.ESTADO_RECLUTANDO: "bg-green-100 text-green-700",
-    Proyecto.ESTADO_FINALIZADO: "bg-green-100 text-green-700",
     Proyecto.ESTADO_BORRADOR: "bg-slate-100 text-slate-600",
-    Proyecto.ESTADO_CANCELADO: "bg-slate-100 text-slate-600",
     Proyecto.ESTADO_PUBLICADO: "bg-violet-100 text-violet-700",
-    Proyecto.ESTADO_EQUIPO_COMPLETO: "bg-violet-100 text-violet-700",
-    Proyecto.ESTADO_EN_DESARROLLO: "bg-violet-100 text-violet-700",
+    Proyecto.ESTADO_RECLUTANDO: "bg-green-100 text-green-700",
+    Proyecto.ESTADO_EQUIPO_COMPLETO: "bg-cyan-100 text-cyan-700",
+    Proyecto.ESTADO_EN_DESARROLLO: "bg-amber-100 text-amber-700",
+    Proyecto.ESTADO_FINALIZADO: "bg-emerald-100 text-emerald-700",
+    Proyecto.ESTADO_CANCELADO: "bg-rose-100 text-rose-600",
 }
 
 
@@ -500,6 +503,10 @@ class ProyectoDeleteView(LoginRequiredMixin, View):
                 request, "Solo el creador del proyecto puede desactivarlo."
             )
             return redirect("projects:project_detail", pk=proyecto.pk)
+
+        if Proyecto.ESTADO_CANCELADO in TRANSICIONES_VALIDAS.get(proyecto.estado, set()):
+            proyecto.estado = Proyecto.ESTADO_CANCELADO
+            proyecto.cancelado_en = timezone.now()
 
         proyecto.es_activo = False
         proyecto.desactivado_en = timezone.now()
