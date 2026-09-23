@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ usuario.nombre_completo }} — DevMatch{% endblock %}
+
+{% block content %}
+<div class="space-y-8 bg-[#F8F7FF]">
+    {% include "accounts/_profile_header.html" %}
+    {% include "accounts/_profile_metrics.html" %}
+    {% include "accounts/_profile_habilidades.html" %}
+    {% include "accounts/_profile_biografia.html" %}
+    {% include "accounts/_profile_proyectos.html" %}
+    {% include "accounts/_profile_resenas.html" %}
+</div>
+{% endblock content %}

@@ -1,0 +1,36 @@
+{% comment %}
+Cabecera del perfil (Pantalla A). Avatar circular con iniciales, nombre,
+@usuario, bio corta y botón secundario "Editar perfil" que enlaza a
+accounts:profile_edit (la vista que lo edita).
+{% endcomment %}
+<header class="rounded-[28px] bg-white p-6 shadow-card ring-1 ring-violet-100">
+    <div class="flex flex-col items-center gap-5 sm:flex-row sm:items-start sm:gap-8">
+        <div class="flex h-40 w-40 shrink-0 items-center justify-center rounded-full bg-[#374357] text-5xl font-extrabold text-white sm:h-48 sm:w-48"
+             aria-hidden="true">
+            {{ usuario.first_name|first|default:usuario.username|first }}{{ usuario.last_name|first }}
+        </div>
+
+        <div class="min-w-0 flex-1 text-center sm:text-left">
+            <h1 class="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
+                {{ usuario.nombre_completo }}
+            </h1>
+            <p class="mt-1 text-sm font-semibold text-violet-700">@{{ usuario.username }}</p>
+
+            {% if perfil.bio %}
+                <p class="mt-4 max-w-prose text-sm leading-relaxed text-[#3B4A6B]">
+                    {{ perfil.bio }}
+                </p>
+            {% endif %}
+
+            <div class="mt-5">
+                <a href="{% url 'accounts:profile_edit' %}"
+                   class="inline-flex items-center gap-2 rounded-full border-2 border-violet-700 px-6 py-2.5 text-sm font-bold text-violet-700 transition-colors hover:bg-violet-700 hover:text-white">
+                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+                    </svg>
+                    Editar perfil
+                </a>
+            </div>
+        </div>
+    </div>
+</header>

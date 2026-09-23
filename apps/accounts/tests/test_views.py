@@ -2,6 +2,16 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from apps.accounts.models import (
+    Habilidad,
+    Interes,
+    Perfil,
+    Tecnologia,
+    UsuarioHabilidad,
+    UsuarioInteres,
+    UsuarioTecnologia,
+)
+
 Usuario = get_user_model()
 
 VALID = {
@@ -118,3 +128,183 @@ class RegistroViewTests(TestCase):
         resp = self.client.post(reverse("accounts:register"), valid_data())
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(Usuario.objects.filter(email__iexact="nueva@devmatch.test").count(), 1)
+
+
+class ProfileDetailViewTests(TestCase):
+    def setUp(self):
+        self.usuario = Usuario.objects.create_user(
+            "perfil@devmatch.test", "perfil_user", password="Clave-Segura-99!"
+        )
+        self.url = reverse("accounts:profile")
+
+    def test_sin_login_redirige_al_login(self):
+        resp = self.client.get(self.url)
+        self.assertRedirects(resp, f"{reverse('accounts:login')}?next={self.url}")
+
+    def test_get_muestra_perfil_autenticado(self):
+        self.client.force_login(self.usuario)
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "accounts/profile_detail.html")
+        self.assertContains(resp, "perfil_user")
+        self.assertTrue(Perfil.objects.filter(usuario=self.usuario).exists())
+
+    def test_muestra_nombre_completo_en_el_header(self):
+        self.usuario.first_name = "Ana"
+        self.usuario.last_name = "Ríos"
+        self.usuario.save(update_fields=["first_name", "last_name"])
+        self.client.force_login(self.usuario)
+        resp = self.client.get(self.url)
+        self.assertContains(resp, "Ana Ríos")
+
+    def test_sin_nombre_muestra_el_username_en_el_header(self):
+        self.client.force_login(self.usuario)
+        resp = self.client.get(self.url)
+        self.assertContains(resp, "perfil_user")
+
+    def test_get_crea_perfil_si_no_existe(self):
+        self.client.force_login(self.usuario)
+        self.client.get(self.url)
+        self.assertEqual(Perfil.objects.filter(usuario=self.usuario).count(), 1)
+
+    def test_get_usa_el_template_vista_a(self):
+        self.client.force_login(self.usuario)
+        resp = self.client.get(self.url)
+        self.assertContains(resp, "Editar perfil")
+
+
+class ProfileEditViewTests(TestCase):
+    def setUp(self):
+        self.usuario = Usuario.objects.create_user(
+            "editar@devmatch.test", "editar_user", password="Clave-Segura-99!"
+        )
+        self.url = reverse("accounts:profile_edit")
+        self.perfil = Perfil.objects.create(usuario=self.usuario)
+
+    def test_sin_login_redirige_al_login(self):
+        resp = self.client.get(self.url)
+        self.assertRedirects(resp, f"{reverse('accounts:login')}?next={self.url}")
+
+    def test_get_usa_el_template_vista_b(self):
+        self.client.force_login(self.usuario)
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "accounts/profile_form.html")
+        self.assertContains(resp, "Datos personales")
+        self.assertContains(resp, "Guardar perfil")
+
+    def test_get_no_crea_duplicado_de_perfil(self):
+        self.client.force_login(self.usuario)
+        self.client.get(self.url)
+        self.assertEqual(Perfil.objects.filter(usuario=self.usuario).count(), 1)
+
+    def test_get_popula_datos_del_usuario(self):
+        self.usuario.first_name = "María"
+        self.usuario.last_name = "López"
+        self.usuario.save()
+        self.client.force_login(self.usuario)
+        resp = self.client.get(self.url)
+        self.assertContains(resp, "María")
+        self.assertContains(resp, "López")
+        self.assertContains(resp, "editar@devmatch.test")
+
+    def test_post_guarda_datos_y_sincroniza_puentes(self):
+        back = Habilidad.objects.create(nombre="Backend")
+        ui = Habilidad.objects.create(nombre="UI/UX")
+        python = Tecnologia.objects.create(nombre="Python")
+        gaming = Interes.objects.create(nombre="Gaming")
+
+        self.client.force_login(self.usuario)
+        resp = self.client.post(
+            self.url,
+            {
+                "username": "editar_user",
+                "first_name": "Carlos",
+                "last_name": "Gómez",
+                "email": "editar@devmatch.test",
+                "nivel": "intermedio",
+                "experiencia_anios": 4,
+                "disponibilidad_horas_semana": 20,
+                "bio": "Fullstack en formación.",
+                "habilidades": [back.pk],
+                "tecnologias": [python.pk],
+                "intereses": [gaming.pk],
+            },
+        )
+        self.assertRedirects(resp, reverse("accounts:profile"))
+
+        self.perfil.refresh_from_db()
+        self.assertEqual(self.perfil.nivel, "intermedio")
+        self.assertEqual(self.perfil.experiencia_anios, 4)
+        self.assertEqual(self.perfil.disponibilidad_horas_semana, 20)
+        self.assertEqual(self.perfil.bio, "Fullstack en formación.")
+
+        self.usuario.refresh_from_db()
+        self.assertEqual(self.usuario.first_name, "Carlos")
+        self.assertEqual(self.usuario.last_name, "Gómez")
+        self.assertEqual(self.usuario.email, "editar@devmatch.test")
+
+        self.assertTrue(
+            UsuarioHabilidad.objects.filter(
+                usuario=self.usuario, habilidad=back
+            ).exists()
+        )
+        self.assertFalse(
+            UsuarioHabilidad.objects.filter(
+                usuario=self.usuario, habilidad=ui
+            ).exists()
+        )
+        self.assertTrue(
+            UsuarioTecnologia.objects.filter(
+                usuario=self.usuario, tecnologia=python
+            ).exists()
+        )
+        self.assertTrue(
+            UsuarioInteres.objects.filter(
+                usuario=self.usuario, interes=gaming
+            ).exists()
+        )
+
+    def test_post_elimina_puentes_deseleccionados(self):
+        python = Tecnologia.objects.create(nombre="Python")
+        UsuarioTecnologia.objects.create(usuario=self.usuario, tecnologia=python)
+
+        self.client.force_login(self.usuario)
+        resp = self.client.post(
+            self.url,
+            {
+                "username": "editar_user",
+                "first_name": "",
+                "last_name": "",
+                "email": "editar@devmatch.test",
+                "nivel": "principiante",
+                "experiencia_anios": 0,
+                "disponibilidad_horas_semana": 10,
+                "bio": "",
+            },
+        )
+        self.assertRedirects(resp, reverse("accounts:profile"))
+        self.assertFalse(
+            UsuarioTecnologia.objects.filter(
+                usuario=self.usuario, tecnologia=python
+            ).exists()
+        )
+
+    def test_post_con_username_repetido_no_guarda(self):
+        Usuario.objects.create_user("otro@devmatch.test", "tomado", password="Clave-Segura-99!")
+        self.client.force_login(self.usuario)
+        resp = self.client.post(
+            self.url,
+            {
+                "username": "tomado",
+                "first_name": "",
+                "last_name": "",
+                "email": "editar@devmatch.test",
+                "nivel": "principiante",
+                "experiencia_anios": 0,
+                "disponibilidad_horas_semana": 10,
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.usuario.refresh_from_db()
+        self.assertEqual(self.usuario.username, "editar_user")

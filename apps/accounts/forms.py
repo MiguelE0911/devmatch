@@ -4,7 +4,7 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.password_validation import validate_password
 from django.core.validators import RegexValidator
 
-from .models import Usuario
+from .models import Habilidad, Interes, Perfil, Tecnologia, Usuario
 
 # Estilo compartido de TODOS los inputs de las pantallas de auth
 # (spec: fondo #F5F5F5, borde #7A7A7A, radio ~8px, alto ~56px,
@@ -227,3 +227,187 @@ class RegistroForm(forms.ModelForm):
         if commit:
             usuario.save()
         return usuario
+
+
+# ---------------------------------------------------------------------------
+# PERFIL TÉCNICO (edición) — forms.py se mantiene como única fuente de estilos
+# de inputs (ver DEVMATCH-DESIGN: no inventar colores). Fondo #F5F5F5 y borde
+# #6B7280 reutilizan el patrón de INPUT_CLASSES de las pantallas de auth.
+# ---------------------------------------------------------------------------
+PROFILE_INPUT_CLASSES = (
+    "h-11 w-full rounded-[10px] border border-gray-500 bg-[#F5F5F5] "
+    "px-3.5 text-sm text-slate-900 placeholder:text-[#959595] transition "
+    "focus:border-violet-700 focus:bg-[#E9E5FC] focus:outline-none "
+    "focus:ring-2 focus:ring-violet-400/40"
+)
+
+
+def _perfil_atributos(clases, placeholder, **extra):
+    attrs = {"class": clases, "placeholder": placeholder}
+    attrs.update(extra)
+    return attrs
+
+
+class ProfileEditForm(forms.ModelForm):
+    """Perfil técnico editable. Combina datos de la cuenta (Usuario) y del
+    perfil (Perfil) en un solo form, tal como consume la vista de edición.
+
+    - Usuario: nombre, apellido y username se editan directamente; el correo
+      se muestra solo-lectura (es la llave de autenticación, no se cambia).
+    - Perfil: nivel, años de experiencia, disponibilidad y biografía.
+    - skills: se pasan como listas de PKs en `habilidades`, `tecnologias` e
+      `intereses`; la vista sincroniza las tablas puente desde cleaned_data.
+    """
+
+    username = forms.CharField(
+        label="Nombre de usuario",
+        validators=[USERNAME_VALIDATOR],
+        widget=forms.TextInput(
+            attrs=_perfil_atributos(
+                PROFILE_INPUT_CLASSES,
+                "Nombre de usuario",
+                autocomplete="username",
+                autocapitalize="none",
+            )
+        ),
+    )
+    first_name = forms.CharField(
+        label="Nombre",
+        required=False,
+        widget=forms.TextInput(
+            attrs=_perfil_atributos(
+                PROFILE_INPUT_CLASSES, "Nombre", autocomplete="given-name"
+            )
+        ),
+    )
+    last_name = forms.CharField(
+        label="Apellido",
+        required=False,
+        widget=forms.TextInput(
+            attrs=_perfil_atributos(
+                PROFILE_INPUT_CLASSES, "Apellido", autocomplete="family-name"
+            )
+        ),
+    )
+    # Correo solo-lectura: no se envía (disabled), solo se muestra destacado.
+    email = forms.EmailField(
+        label="Correo electrónico",
+        widget=forms.EmailInput(
+            attrs={
+                "class": (
+                    "h-11 w-full rounded-[10px] border border-violet-700 "
+                    "bg-[#E9E5FC] px-3.5 text-sm text-slate-900 opacity-90"
+                ),
+                "readonly": True,
+            }
+        ),
+    )
+    nivel = forms.ChoiceField(
+        label="Nivel técnico",
+        choices=Perfil.NIVEL_CHOICES,
+        widget=forms.Select(
+            attrs=_perfil_atributos(PROFILE_INPUT_CLASSES, "Nivel técnico")
+        ),
+    )
+    experiencia_anios = forms.IntegerField(
+        label="Años de experiencia",
+        min_value=0,
+        widget=forms.NumberInput(
+            attrs=_perfil_atributos(
+                PROFILE_INPUT_CLASSES, "Años de experiencia"
+            )
+        ),
+    )
+    disponibilidad_horas_semana = forms.IntegerField(
+        label="Disponibilidad",
+        min_value=0,
+        help_text="Horas por semana",
+        widget=forms.NumberInput(
+            attrs=_perfil_atributos(
+                PROFILE_INPUT_CLASSES, "Horas por semana"
+            )
+        ),
+    )
+    bio = forms.CharField(
+        label="Biografía",
+        required=False,
+        widget=forms.Textarea(
+            attrs={
+                "class": (
+                    "min-h-28 w-full rounded-[16px] border border-gray-500 "
+                    "bg-[#F5F5F5] px-3.5 py-3 text-sm text-slate-900 "
+                    "placeholder:text-[#959595] transition resize-none "
+                    "focus:border-violet-700 focus:bg-[#E9E5FC] "
+                    "focus:outline-none focus:ring-2 focus:ring-violet-400/40"
+                ),
+                "placeholder": "Contanos en qué trabajás, tu enfoque y lo que te apasiona…",
+                "rows": 4,
+            }
+        ),
+    )
+    habilidades = forms.ModelMultipleChoiceField(
+        queryset=Habilidad.objects.filter(es_activo=True).order_by("nombre"),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+    )
+    tecnologias = forms.ModelMultipleChoiceField(
+        queryset=Tecnologia.objects.filter(es_activo=True).order_by("nombre"),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+    )
+    intereses = forms.ModelMultipleChoiceField(
+        queryset=Interes.objects.filter(es_activo=True).order_by("nombre"),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+    )
+
+    class Meta:
+        model = Perfil
+        fields = (
+            "nivel",
+            "experiencia_anios",
+            "disponibilidad_horas_semana",
+            "bio",
+        )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.usuario_id:
+            usuario = self.instance.usuario
+            self.fields["username"].initial = usuario.username
+            self.fields["first_name"].initial = usuario.first_name
+            self.fields["last_name"].initial = usuario.last_name
+            self.fields["email"].initial = usuario.email
+            self.initial["habilidades"] = list(
+                usuario.usuariohabilidad_set.values_list("habilidad_id", flat=True)
+            )
+            self.initial["tecnologias"] = list(
+                usuario.usuariotecnologia_set.values_list("tecnologia_id", flat=True)
+            )
+            self.initial["intereses"] = list(
+                usuario.usuariointeres_set.values_list("interes_id", flat=True)
+            )
+
+    def clean_username(self):
+        username = self.cleaned_data.get("username")
+        duplicado = (
+            Usuario.objects.filter(username__iexact=username)
+            .exclude(pk=self.instance.usuario_id)
+            .exists()
+        )
+        if duplicado:
+            raise forms.ValidationError("Este nombre de usuario ya está en uso.")
+        return username
+
+    def save(self, commit=True):
+        # El form edita datos de Usuario y de Perfil a la vez: el ModelForm
+        # base solo guarda Perfil (instance), así que persistimos también los
+        # cambios sobre la cuenta (manteniendo el correo, que es solo lectura).
+        perfil = super().save(commit=commit)
+        if commit and perfil.usuario_id:
+            usuario = perfil.usuario
+            usuario.username = self.cleaned_data["username"]
+            usuario.first_name = self.cleaned_data["first_name"]
+            usuario.last_name = self.cleaned_data["last_name"]
+            usuario.save(update_fields=["username", "first_name", "last_name"])
+        return perfil

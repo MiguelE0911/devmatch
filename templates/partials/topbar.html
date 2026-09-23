@@ -68,8 +68,8 @@ Colores: bg-app-navbar (#333074), buscador bg-app-search (#5B56A5).
                         </p>
                         <p class="truncate text-xs text-slate-500">{{ request.user.email|default:request.user.username }}</p>
                     </div>
-                    {% comment %}TODO perfil técnico: apuntar a la vista del perfil cuando exista (Squad B).{% endcomment %}
-                    <a href="#" role="menuitem"
+                    {% comment %}Enlace al perfil técnico — accounts:profile (Vista de perfil).{% endcomment %}
+                    <a href="{% url 'accounts:profile' %}" role="menuitem"
                        class="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50">
                         <svg class="h-4 w-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>

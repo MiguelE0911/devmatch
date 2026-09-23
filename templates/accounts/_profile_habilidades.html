@@ -1,0 +1,62 @@
+{% comment %}
+Card Habilidades (Pantalla A): encabezado lavanda + una sub-card por grupo
+(Backend/Frontend/Herramientas) con chips, y dos tarjetas gemelas para
+Tecnologías e Intereses. Reusable: se incluye desde profile_detail.html.
+{% endcomment %}
+<section class="rounded-[28px] bg-white shadow-card ring-1 ring-violet-100"
+         aria-labelledby="perfil-habilidades">
+    <header class="rounded-t-[28px] border-b border-violet-200 bg-violet-100 px-6 py-4">
+        <h2 id="perfil-habilidades" class="text-lg font-extrabold tracking-tight text-violet-700">Habilidades</h2>
+    </header>
+
+    <div class="space-y-5 p-6">
+        {% if grupos_habilidades %}
+            <div class="grid gap-4 md:grid-cols-3">
+                {% for grupo in grupos_habilidades %}
+                    <div class="rounded-[20px] bg-[#F8F7FF] p-4 ring-1 ring-violet-100">
+                        <h3 class="text-sm font-bold text-violet-700">{{ grupo.grupo }}</h3>
+                        {% if grupo.habilidades %}
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                {% for habilidad in grupo.habilidades %}
+                                    {% include "accounts/_chip.html" with chip=habilidad.nombre %}
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <p class="mt-3 text-xs text-[#3B4A6B]">Sin habilidades cargadas.</p>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="text-sm text-[#3B4A6B]">Todavía no cargaste habilidades.</p>
+        {% endif %}
+
+        <div class="grid gap-4 sm:grid-cols-2">
+            <div class="rounded-[20px] border border-violet-200 bg-[#F8F7FF] p-4">
+                <h3 class="text-sm font-bold text-violet-700">Tecnologías</h3>
+                {% if tecnologias %}
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        {% for tecnologia in tecnologias %}
+                            {% include "accounts/_chip.html" with chip=tecnologia.nombre %}
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="mt-3 text-xs text-[#3B4A6B]">Sin tecnologías cargadas.</p>
+                {% endif %}
+            </div>
+
+            <div class="rounded-[20px] border border-violet-200 bg-[#F8F7FF] p-4">
+                <h3 class="text-sm font-bold text-violet-700">Intereses</h3>
+                {% if intereses %}
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        {% for interes in intereses %}
+                            {% include "accounts/_chip.html" with chip=interes.nombre %}
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="mt-3 text-xs text-[#3B4A6B]">Sin intereses cargados.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</section>
