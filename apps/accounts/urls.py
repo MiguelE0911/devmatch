@@ -29,4 +29,10 @@ urlpatterns = [
         LogoutView.as_view(next_page="accounts:login"),
         name="logout",
     ),
+    path("perfil/", views.ProfileDetailView.as_view(), name="profile"),
+    path(
+        "perfil/editar/",
+        views.ProfileEditView.as_view(),
+        name="profile_edit",
+    ),
 ]
