@@ -3,8 +3,8 @@ import json
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
+from django.http import JsonResponse, Http404
 from django.db.models import Q
-from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.utils import timezone
@@ -161,6 +161,14 @@ class ProyectoDetailView(DetailView):
             return qs.exclude(estado__in=ESTADOS_OCULTOS)
         return qs.filter(Q(creador_id=usuario.id) | ~Q(estado__in=ESTADOS_OCULTOS))
 
+    def get_object(self, queryset=None):
+            proyecto = super().get_object(queryset)
+            
+            if proyecto.estado == Proyecto.ESTADO_BORRADOR and proyecto.creador_id != self.request.user.id:
+                raise Http404("El proyecto no existe o aún es un borrador privado.")
+                
+            return proyecto
+    
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         proyecto = self.object
@@ -531,3 +539,32 @@ class ProyectoDeleteView(LoginRequiredMixin, View):
         )
         # No hay home interno todavía: el listado propio llega en una etapa posterior.
         return redirect("core:home")
+
+class ProyectoCreateView(LoginRequiredMixin, CreateView):
+    """Creación de un nuevo proyecto desde el modal."""
+
+    model = Proyecto
+    form_class = ProyectoForm
+    template_name = "projects/project_create.html"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        # La X / Cancelar del modal vuelven a la vista previa del shell
+        # (?next llega desde parciales/sidebar) o al feed interno por defecto —
+        # nunca a la landing. Solo se aceptan URLs internas (open redirect).
+        next_url = self.request.GET.get("next", "")
+        ctx["volver"] = (
+            next_url
+            if next_url.startswith("/") and not next_url.startswith("//")
+            else reverse("core:feed")
+        )
+        return ctx
+
+    def form_valid(self, form):
+        form.instance.creador = self.request.user
+        form.instance.es_activo = True
+        messages.success(self.request, "¡Proyecto creado exitosamente!")
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse("projects:project_detail", kwargs={"pk": self.object.pk})

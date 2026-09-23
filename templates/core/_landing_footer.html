@@ -31,11 +31,11 @@ Uso: {% include "core/_landing_footer.html" %}
                 </p>
 
                 <div class="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-                <a href="{% url 'accounts:login' %}"
+                <a href="{% url 'accounts:login' %}?next={% url 'core:feed' %}"
                    class="rounded-full bg-violet-400 px-6 py-3 text-center text-sm font-bold text-violet-950 shadow-sm transition-colors hover:bg-violet-300 sm:w-auto">
                     Ingresar
                 </a>
-                <a href="{% url 'accounts:register' %}"
+                <a href="{% url 'accounts:login' %}?next={% url 'core:feed' %}"
                    class="rounded-full bg-white px-6 py-3 text-center text-sm font-bold text-violet-700 shadow-sm transition-colors hover:bg-violet-100 sm:w-auto">
                     Crear mi cuenta
                 </a>
@@ -132,8 +132,8 @@ Uso: {% include "core/_landing_footer.html" %}
             <nav aria-label="Acceso a la plataforma">
                 <h3 class="text-xs font-bold uppercase tracking-widest text-white/60">Acceso</h3>
                 <ul class="mt-4 space-y-2.5">
-                    <li><a href="{% url 'accounts:login' %}" class="text-sm font-semibold text-white/80 transition-colors hover:text-white">Ingresar</a></li>
-                    <li><a href="{% url 'accounts:register' %}" class="text-sm font-semibold text-white/80 transition-colors hover:text-white">Crear mi cuenta</a></li>
+                    <li><a href="{% url 'accounts:login' %}?next={% url 'core:feed' %}" class="text-sm font-semibold text-white/80 transition-colors hover:text-white">Ingresar</a></li>
+                    <li><a href="{% url 'accounts:login' %}?next={% url 'core:feed' %}" class="text-sm font-semibold text-white/80 transition-colors hover:text-white">Crear mi cuenta</a></li>
                 </ul>
             </nav>
         </div>
