@@ -96,6 +96,33 @@
                 toggle.setAttribute("aria-expanded", "false");
             });
         });
+
+        var modalToggles = document.querySelectorAll("[data-modal-toggle]");
+        var modalCloses = document.querySelectorAll("[data-modal-close]");
+
+        modalToggles.forEach(function (btn) {
+            btn.addEventListener("click", function (e) {
+                e.preventDefault();
+                var modalId = btn.getAttribute("data-modal-toggle");
+                var modal = document.getElementById(modalId);
+                if (modal) {
+                    modal.classList.remove("hidden");
+                    modal.classList.add("flex");
+                }
+            });
+        });
+
+        modalCloses.forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                var modalId = btn.getAttribute("data-modal-close");
+                var modal = document.getElementById(modalId);
+                if (modal) {
+                    modal.classList.add("hidden");
+                    modal.classList.remove("flex");
+                }
+            });
+        });
+
     })();
 </script>
 {% endblock extra_scripts %}
