@@ -82,7 +82,7 @@ class RegistroViewTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertTemplateUsed(resp, "accounts/register.html")
         self.assertContains(resp, "Regístrate para continuar")
-        self.assertContains(resp, "3 a 30 caracteres")
+        self.assertContains(resp, "Máximo 30 caracteres")
         self.assertContains(resp, "Mínimo 8 caracteres")
         self.assertEqual(resp.content.decode().count("data-target="), 2)
 

@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.projects.models import Proyecto, ProyectoMedia
 
@@ -18,7 +19,10 @@ class GaleriaViewsTests(TestCase):
             "otro-galeria@devmatch.test", "otro-galeria", password="Clave-123!"
         )
         self.proyecto = Proyecto.objects.create(
-            creador=self.creador, nombre="Demo", descripcion="desc"
+            creador=self.creador,
+            nombre="Demo",
+            descripcion="desc",
+            estado=Proyecto.ESTADO_RECLUTANDO,
         )
         self.base = reverse("projects:project_detail", args=[self.proyecto.pk])
 
@@ -264,3 +268,54 @@ class ProyectoDeleteTests(TestCase):
         self.assertFalse(self.proyecto.es_activo)
         self.assertIsNotNone(self.proyecto.desactivado_en)
         self.assertEqual(self.proyecto.desactivado_por, self.creador)
+
+
+class ProyectoDetailVisibilidadTests(TestCase):
+    def setUp(self):
+        self.creador = Usuario.objects.create_user(
+            "creador-visibilidad@devmatch.test",
+            "creador-visibilidad",
+            password="Clave-123!",
+        )
+        self.otro = Usuario.objects.create_user(
+            "otro-visibilidad@devmatch.test", "otro-visibilidad", password="Clave-123!"
+        )
+        self.proyecto = Proyecto.objects.create(
+            creador=self.creador, nombre="Demo", descripcion="desc"
+        )
+        self.url = reverse("projects:project_detail", args=[self.proyecto.pk])
+
+    def test_anonimo_no_ve_borrador(self):
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 404)
+
+    def test_otro_dueno_no_ve_borrador(self):
+        self.client.force_login(self.otro)
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 404)
+
+    def test_dueno_si_ve_su_borrador(self):
+        self.client.force_login(self.creador)
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_anonimo_no_ve_cancelado(self):
+        self.proyecto.estado = Proyecto.ESTADO_CANCELADO
+        self.proyecto.cancelado_en = timezone.now()
+        self.proyecto.save()
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 404)
+
+    def test_tercero_ve_estados_visibles(self):
+        self.proyecto.estado = Proyecto.ESTADO_RECLUTANDO
+        self.proyecto.save()
+        self.client.force_login(self.otro)
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_anonimo_redirige_a_login_en_vista_protegida(self):
+        resp = self.client.get(
+            reverse("projects:project_delete", args=[self.proyecto.pk])
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(resp.url.startswith("/ingresar/"))

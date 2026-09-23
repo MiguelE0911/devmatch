@@ -3,6 +3,7 @@ import json
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
+from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -17,6 +18,12 @@ from .services import TRANSICIONES_VALIDAS
 
 TABS = ("vacantes", "descripcion", "galeria")
 TAB_INICIAL = "vacantes"
+
+# Estados que NO se muestran a terceros en el detalle: "borrador" aún no es
+# listable y "cancelado" no es un estado abierto (misma regla que el feed,
+# core.views.ESTADOS_OCULTOS). El dueño del proyecto sí accede a los suyos —
+# necesita ver/editar su borrador — por eso el filtro es "dueño OR visible".
+ESTADOS_OCULTOS = (Proyecto.ESTADO_BORRADOR, Proyecto.ESTADO_CANCELADO)
 
 # Badge de estado de la cabecera: (clases de color, label). Cada uno de los 7
 # estados usa un color DIFERENTE (spec: "cada uno con un color diferente").
@@ -148,7 +155,11 @@ class ProyectoDetailView(DetailView):
     pk_url_kwarg = "pk"
 
     def get_queryset(self):
-        return Proyecto.objects.select_related("creador").filter(es_activo=True)
+        qs = Proyecto.objects.select_related("creador").filter(es_activo=True)
+        usuario = self.request.user
+        if not usuario.is_authenticated:
+            return qs.exclude(estado__in=ESTADOS_OCULTOS)
+        return qs.filter(Q(creador_id=usuario.id) | ~Q(estado__in=ESTADOS_OCULTOS))
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)

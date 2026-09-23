@@ -111,6 +111,12 @@ else:
 # Django no arranca. Archivo compartido: avisar en el chat antes de tocarlo.
 # --------------------------------------------------------------------------
 AUTH_USER_MODEL = "accounts.Usuario"
+
+# Login del shell: el mixin LoginRequiredMixin redirige aquí. La ruta real es
+# /ingresar/ (accounts:login); sin esto, las vistas protegidas 40xean a
+# /accounts/login/ que no existe.
+LOGIN_URL = "accounts:login"
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
