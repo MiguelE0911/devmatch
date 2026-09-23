@@ -1,0 +1,17 @@
+{% load static %}
+{% comment %}
+Head compartido para páginas standalone (fuera del shell base.html).
+Carga Montserrat (Google Fonts), el CSS compilado y las metas de marca.
+Uso:
+  {% include "core/_head.html" with title="DevMatch — …" description="Descripción (opcional)" %}
+{% endcomment %}
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#F5F9FA">
+<title>{{ title|default:"DevMatch" }}</title>
+{% if description %}<meta name="description" content="{{ description }}">{% endif %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap"
+      rel="stylesheet">
+<link rel="stylesheet" href="{% static 'dist/output.css' %}">

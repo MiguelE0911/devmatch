@@ -1,0 +1,30 @@
+<div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <h3 class="flex items-center gap-2 text-sm font-bold text-slate-900">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4 text-violet-700">
+            <path fill-rule="evenodd" d="M8.25 6.75a3.75 3.75 0 1 1 7.5 0 3.75 3.75 0 0 1-7.5 0ZM15.75 9.75a3 3 0 1 1 6 0 3 3 0 0 1-6 0ZM2.25 9.75a3 3 0 1 1 6 0 3 3 0 0 1-6 0ZM6.31 15.117A6.745 6.745 0 0 1 12 12a6.745 6.745 0 0 1 6.709 7.498.75.75 0 0 1-.372.568A12.696 12.696 0 0 1 12 21.75c-2.305 0-4.47-.612-6.337-1.684a.75.75 0 0 1-.372-.568 6.787 6.787 0 0 1 1.019-4.38Z" clip-rule="evenodd"/>
+        </svg>
+        Composición del equipo
+    </h3>
+
+    <div class="mt-4 flex items-center gap-3">
+        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-700 text-sm font-bold text-white">
+            {{ proyecto.creador.get_full_name|default:proyecto.creador.username|slice:":1"|upper }}
+        </div>
+        <div class="min-w-0 flex-1">
+            <p class="truncate text-sm font-bold text-slate-900">
+                {{ proyecto.creador.get_full_name|default:proyecto.creador.username }}
+            </p>
+            <p class="text-xs text-slate-500">Creador del proyecto</p>
+        </div>
+        <span class="rounded-full bg-violet-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-violet-700">Admin</span>
+    </div>
+
+    {# Los miembros reales llegan con equipos_membresias (Etapa 3). Hasta #}
+    {# entonces la card muestra solo al creador, sin nombres inventados. #}
+    <div class="mt-4 rounded-2xl border border-dashed border-violet-200 bg-violet-50/50 px-4 py-3">
+        <p class="text-xs leading-relaxed text-slate-500">
+            El equipo se completa cuando se aceptan postulaciones.
+            <span class="font-semibold text-violet-700">Los miembros se verán aquí en la Etapa 3.</span>
+        </p>
+    </div>
+</div>

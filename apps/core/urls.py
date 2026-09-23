@@ -6,4 +6,6 @@ app_name = "core"
 
 urlpatterns = [
     path("", views.home, name="home"),
+    path("health/", views.health, name="health"),
+    path("home/", views.FeedView.as_view(), name="feed"),
 ]

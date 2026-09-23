@@ -1,0 +1,42 @@
+{% comment %}
+Card "Proyectos creados" (Pantalla A). Lista los proyectos del usuario con
+logo, nombre, badge de estado (reutiliza badge_estado de projects.views) y
+enlace al detalle. Solo los activos (es_activo=True) — DEVMATCH-BD sección 9.
+{% endcomment %}
+<section class="rounded-[28px] bg-white p-6 shadow-card ring-1 ring-violet-100"
+         aria-labelledby="perfil-proyectos">
+    <header class="mb-4 flex items-center justify-between">
+        <h2 id="perfil-proyectos" class="text-lg font-extrabold tracking-tight text-violet-700">Proyectos creados</h2>
+        <span class="rounded-full bg-violet-100 px-3 py-1 text-[11px] font-bold tracking-wide text-violet-700">{{ proyectos|length }}</span>
+    </header>
+
+    {% if proyectos %}
+        <ul class="space-y-4">
+            {% for proyecto in proyectos %}
+                <li>
+                    <a href="{% url 'projects:project_detail' proyecto.pk %}"
+                       class="flex items-center gap-4 rounded-[20px] p-3 transition-colors hover:bg-[#F8F7FF]">
+                        <span class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[14px] bg-violet-100 text-violet-700">
+                            {% if proyecto.logo_url %}
+                                <img src="{{ proyecto.logo_url }}" alt="" class="h-full w-full object-cover">
+                            {% else %}
+                                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9L9.2 3.9A2 2 0 0 0 7.5 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
+                                </svg>
+                            {% endif %}
+                        </span>
+                        <span class="min-w-0 flex-1">
+                            <span class="block truncate text-sm font-bold text-slate-900">{{ proyecto.nombre }}</span>
+                            <span class="block text-xs text-[#3B4A6B]">{{ proyecto.get_estado_display }}</span>
+                        </span>
+                        <span class="inline-flex shrink-0 items-center rounded-full {{ proyecto.estado_badge }} px-3 py-1 text-[11px] font-bold uppercase tracking-wide">
+                            {{ proyecto.get_estado_display }}
+                        </span>
+                    </a>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p class="text-sm text-[#3B4A6B]">Todavía no creaste proyectos.</p>
+    {% endif %}
+</section>

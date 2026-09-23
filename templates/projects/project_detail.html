@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}{{ proyecto.nombre }} — DevMatch{% endblock %}
+
+{% block content %}
+<div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+    <div class="min-w-0 space-y-6">
+        {% include "projects/_proyecto_encabezado.html" %}
+        {% include "projects/_proyecto_tabs.html" %}
+
+        <section id="panel-vacantes" data-panel="vacantes" role="tabpanel" aria-labelledby="tab-vacantes"
+                 class="{% if tab != 'vacantes' %}hidden{% endif %}">
+            {% include "projects/_tab_vacantes.html" %}
+        </section>
+
+        <section id="panel-descripcion" data-panel="descripcion" role="tabpanel" aria-labelledby="tab-descripcion"
+                 class="{% if tab != 'descripcion' %}hidden{% endif %}">
+            {% include "projects/_tab_descripcion.html" %}
+        </section>
+
+        <section id="panel-galeria" data-panel="galeria" role="tabpanel" aria-labelledby="tab-galeria"
+                 class="{% if tab != 'galeria' %}hidden{% endif %}">
+            {% include "projects/_tab_galeria.html" %}
+        </section>
+    </div>
+
+    <aside class="space-y-6">
+        {% include "projects/_requisitos.html" %}
+        {% include "projects/_equipo.html" %}
+    </aside>
+</div>
+{% endblock content %}
+
+{% block extra_scripts %}
+<script>
+    (function () {
+        var tabs = document.querySelectorAll("[data-tab]");
+        var paneles = document.querySelectorAll("[data-panel]");
+
+        function activar(tab) {
+            var url = new URL(window.location.href);
+            url.searchParams.set("tab", tab);
+            history.replaceState(null, "", url.toString());
+
+            paneles.forEach(function (panel) {
+                panel.classList.toggle("hidden", panel.dataset.panel !== tab);
+            });
+
+            tabs.forEach(function (boton) {
+                var activo = boton.dataset.tab === tab;
+                boton.setAttribute("aria-selected", String(activo));
+                boton.classList.remove("border-violet-700", "text-violet-700", "border-transparent", "text-slate-500", "hover:text-violet-700");
+                boton.classList.add.apply(boton.classList, (activo ? boton.dataset.clsOn : boton.dataset.clsOff).split(" "));
+            });
+        }
+
+        tabs.forEach(function (boton) {
+            boton.addEventListener("click", function () {
+                activar(boton.dataset.tab);
+            });
+        });
+
+        var contenedoresMenu = document.querySelectorAll("[data-menu]");
+        contenedoresMenu.forEach(function (contenedorMenu) {
+            var toggle = contenedorMenu.querySelector("[data-menu-toggle]");
+            var panel = contenedorMenu.querySelector("[data-menu-panel]");
+
+            toggle.addEventListener("click", function (e) {
+                e.stopPropagation();
+                var abierto = panel.classList.toggle("hidden") === false;
+                toggle.setAttribute("aria-expanded", String(abierto));
+            });
+
+            panel.querySelectorAll("[role='menuitem']").forEach(function (item) {
+                item.addEventListener("click", function () {
+                    panel.classList.add("hidden");
+                    toggle.setAttribute("aria-expanded", "false");
+                });
+            });
+
+            var formDelete = contenedorMenu.querySelector("form[data-confirm]");
+            if (formDelete) {
+                formDelete.addEventListener("submit", function (e) {
+                    if (!window.confirm(formDelete.dataset.confirm)) {
+                        e.preventDefault();
+                    }
+                });
+            }
+        });
+
+        document.addEventListener("click", function () {
+            contenedoresMenu.forEach(function (contenedorMenu) {
+                var toggle = contenedorMenu.querySelector("[data-menu-toggle]");
+                var panel = contenedorMenu.querySelector("[data-menu-panel]");
+                panel.classList.add("hidden");
+                toggle.setAttribute("aria-expanded", "false");
+            });
+        });
+
+        var modalToggles = document.querySelectorAll("[data-modal-toggle]");
+        var modalCloses = document.querySelectorAll("[data-modal-close]");
+
+        modalToggles.forEach(function (btn) {
+            btn.addEventListener("click", function (e) {
+                e.preventDefault();
+                var modalId = btn.getAttribute("data-modal-toggle");
+                var modal = document.getElementById(modalId);
+                if (modal) {
+                    modal.classList.remove("hidden");
+                    modal.classList.add("flex");
+                }
+            });
+        });
+
+        modalCloses.forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                var modalId = btn.getAttribute("data-modal-close");
+                var modal = document.getElementById(modalId);
+                if (modal) {
+                    modal.classList.add("hidden");
+                    modal.classList.remove("flex");
+                }
+            });
+        });
+
+    })();
+</script>
+{% endblock extra_scripts %}

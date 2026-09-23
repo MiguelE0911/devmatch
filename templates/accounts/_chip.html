@@ -1,0 +1,7 @@
+{% comment %}
+Chip/tag reutilizable. Uso:
+    {% include "accounts/_chip.html" with chip=habilidad.nombre %}
+{% endcomment %}
+{% if chip != "" %}
+<span class="rounded-full bg-white px-3 py-1 text-xs font-bold text-violet-700 ring-1 ring-violet-300">{{ chip }}</span>
+{% endif %}

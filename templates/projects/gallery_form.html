@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+
+{% block title %}Editar galería — {{ proyecto.nombre }} — DevMatch{% endblock %}
+
+{% block content %}
+<div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+    <div class="min-w-0 space-y-5">
+        {% include "projects/_proyecto_encabezado.html" with con_descripcion=False %}
+
+        <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 class="text-lg font-bold text-slate-900">Editar galería</h2>
+            <p class="mt-1 text-sm text-slate-500">
+                Carga capturas del prototipo pegando su URL. Ajusta el orden con las flechas y elimina las que ya no quieras.
+            </p>
+
+            <form method="post" class="mt-6 space-y-6">
+                {% csrf_token %}
+                {{ form.non_field_errors }}
+
+                <div>
+                    <label for="{{ form.archivo_url.id_for_label }}" class="mb-1.5 block text-sm font-semibold text-slate-800">
+                        {{ form.archivo_url.label }}
+                    </label>
+                    <p class="mb-2 text-xs leading-relaxed text-slate-500">
+                        Dirección pública de la imagen (https://... o /media/...).
+                    </p>
+                    {{ form.archivo_url }}
+                    {{ form.archivo_url.errors }}
+                </div>
+
+                <div>
+                    <label for="{{ form.orden.id_for_label }}" class="mb-1.5 block text-sm font-semibold text-slate-800">
+                        {{ form.orden.label }}
+                    </label>
+                    <p class="mb-2 text-xs leading-relaxed text-slate-500">
+                        Posición de la imagen en la galería. Vacío = se agrega al final.
+                    </p>
+                    {{ form.orden }}
+                    {{ form.orden.errors }}
+                </div>
+
+                <div class="flex items-center justify-end gap-3">
+                    <a href="{% url 'projects:project_detail' proyecto.pk %}"
+                       class="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50">
+                        Cancelar
+                    </a>
+                    <button type="submit"
+                            class="inline-flex items-center gap-2 rounded-full bg-violet-700 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-violet-800">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4">
+                            <path fill-rule="evenodd" d="M10.5 3.75a6 6 0 0 0-5.98 6.496A5.25 5.25 0 0 0 6.75 20.25H18a4.5 4.5 0 0 0 2.206-8.423 3.75 3.75 0 0 0-4.124-3.77 6.002 6.002 0 0 0-5.582-4.307Zm3.75 6.75a.75.75 0 0 0-1.5 0v2.25H10.5a.75.75 0 0 0 0 1.5h2.25v2.25a.75.75 0 0 0 1.5 0v-2.25h2.25a.75.75 0 0 0 0-1.5h-2.25V10.5Z" clip-rule="evenodd"/>
+                        </svg>
+                        Subir imagen
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 class="text-lg font-bold text-slate-900">Imágenes del proyecto</h2>
+            <p class="mt-1 text-sm text-slate-500">
+                La galería pública muestra las imágenes que mantienes aquí, en el orden indicado.
+            </p>
+
+            {% if prototipos %}
+                <div id="galeria-grid" class="mt-4 grid grid-cols-2 gap-4"
+                     data-reorder-url="{% url 'projects:media_reorder' proyecto.pk %}"
+                     data-csrf="{{ csrf_token }}">
+                    {% for prototipo in prototipos %}
+                        <div class="relative overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm" data-media-card="{{ prototipo.pk }}">
+                            <div class="aspect-video w-full">
+                                <img src="{{ prototipo.archivo_url }}" alt="Prototipo de {{ proyecto.nombre }}"
+                                     class="h-full w-full object-cover">
+                            </div>
+
+                            <div class="absolute left-2 top-2 z-10 flex flex-col gap-1">
+                                <button type="button" data-mover="arriba" data-media-id="{{ prototipo.pk }}"
+                                        aria-label="Mover imagen hacia arriba"
+                                        class="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-slate-500">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
+                                        <path fill-rule="evenodd" d="M9.47 6.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 1 1-1.06 1.06L10 8.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06l4.25-4.25Z" clip-rule="evenodd"/>
+                                    </svg>
+                                </button>
+                                <button type="button" data-mover="abajo" data-media-id="{{ prototipo.pk }}"
+                                        aria-label="Mover imagen hacia abajo"
+                                        class="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-slate-500">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
+                                        <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 12.06l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/>
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <div class="absolute right-2 top-2 z-10" data-menu>
+                                <button type="button" data-menu-toggle aria-haspopup="true" aria-expanded="false"
+                                        aria-label="Opciones de la imagen"
+                                        class="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-700">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4">
+                                        <path fill-rule="evenodd" d="M4.5 12a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0Zm6 0a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0Zm6 0a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0Z" clip-rule="evenodd"/>
+                                    </svg>
+                                </button>
+
+                                <div data-menu-panel role="menu" aria-label="Opciones de la imagen"
+                                     class="absolute right-0 z-20 mt-2 hidden w-48 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+                                    <form method="post" action="{% url 'projects:media_delete' prototipo.pk %}"
+                                          data-confirm="¿Eliminar esta imagen? Esta acción no se puede deshacer.">
+                                        {% csrf_token %}
+                                        <button type="submit" role="menuitem"
+                                                class="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 transition-colors hover:bg-red-50">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4">
+                                                <path fill-rule="evenodd" d="M16.5 4.478v.227a48.816 48.816 0 0 1 3.878.512.75.75 0 1 1-.256 1.478l-.209-.035-1.005 13.07a3 3 0 0 1-2.991 2.77H8.084a3 3 0 0 1-2.991-2.77L4.087 6.66l-.209.035a.75.75 0 0 1-.256-1.478A48.567 48.567 0 0 1 7.5 4.705v-.227c0-1.564 1.213-2.9 2.816-2.951a52.662 52.662 0 0 1 3.369 0c1.603.051 2.815 1.387 2.815 2.951Zm-6.136-1.452a51.196 51.196 0 0 1 3.273 0C14.39 3.05 15 3.684 15 4.478v.113a49.488 49.488 0 0 0-6 0v-.113c0-.794.609-1.428 1.364-1.452Zm-.355 5.945a.75.75 0 1 0-1.5.058l.347 9a.75.75 0 0 0 1.499-.058l-.346-9Zm5.48.058a.75.75 0 0 0-1.498-.058l-.347 9a.75.75 0 0 0 1.498.058l.347-9Z" clip-rule="evenodd"/>
+                                            </svg>
+                                            Eliminar
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="mt-4 flex aspect-video w-full items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50">
+                    <p class="text-sm font-medium text-slate-400">
+                        Aún no hay capturas cargadas. Sube la primera arriba.
+                    </p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <aside class="space-y-5">
+        {% include "projects/_requisitos.html" %}
+        {% include "projects/_equipo.html" %}
+    </aside>
+</div>
+{% endblock content %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        var contenedoresMenu = document.querySelectorAll("[data-menu]");
+        contenedoresMenu.forEach(function (contenedorMenu) {
+            var toggle = contenedorMenu.querySelector("[data-menu-toggle]");
+            var panel = contenedorMenu.querySelector("[data-menu-panel]");
+
+            toggle.addEventListener("click", function (e) {
+                e.stopPropagation();
+                var abierto = panel.classList.toggle("hidden") === false;
+                toggle.setAttribute("aria-expanded", String(abierto));
+            });
+
+            var formDelete = contenedorMenu.querySelector("form[data-confirm]");
+            if (formDelete) {
+                formDelete.addEventListener("submit", function (e) {
+                    if (!window.confirm(formDelete.dataset.confirm)) {
+                        e.preventDefault();
+                    }
+                });
+            }
+        });
+
+        document.addEventListener("click", function () {
+            contenedoresMenu.forEach(function (contenedorMenu) {
+                var toggle = contenedorMenu.querySelector("[data-menu-toggle]");
+                var panel = contenedorMenu.querySelector("[data-menu-panel]");
+                panel.classList.add("hidden");
+                toggle.setAttribute("aria-expanded", "false");
+            });
+        });
+
+        var grid = document.getElementById("galeria-grid");
+        if (grid) {
+            var reorderUrl = grid.dataset.reorderUrl;
+            var csrf = grid.dataset.csrf;
+            var ocupado = false;
+
+            function sincronizarBotones() {
+                var cards = grid.querySelectorAll("[data-media-card]");
+                cards.forEach(function (card, i) {
+                    var up = card.querySelector('[data-mover="arriba"]');
+                    var down = card.querySelector('[data-mover="abajo"]');
+                    if (up) {
+                        up.disabled = i === 0;
+                    }
+                    if (down) {
+                        down.disabled = i === cards.length - 1;
+                    }
+                });
+            }
+
+            grid.addEventListener("click", function (e) {
+                var boton = e.target.closest ? e.target.closest("[data-mover]") : null;
+                if (!boton || ocupado) {
+                    return;
+                }
+                var delta = boton.dataset.mover === "arriba" ? -1 : 1;
+                var id = Number(boton.dataset.mediaId);
+                var cards = Array.prototype.slice.call(grid.querySelectorAll("[data-media-card]"));
+                var index = cards.findIndex(function (c) {
+                    return Number(c.dataset.mediaCard) === id;
+                });
+                var nuevo = index + delta;
+                if (index < 0 || nuevo < 0 || nuevo >= cards.length) {
+                    return;
+                }
+                var ids = cards.map(function (c) {
+                    return Number(c.dataset.mediaCard);
+                });
+                var tmp = ids[index];
+                ids[index] = ids[nuevo];
+                ids[nuevo] = tmp;
+
+                ocupado = true;
+                fetch(reorderUrl, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": csrf
+                    },
+                    body: JSON.stringify({ ids: ids })
+                }).then(function (resp) {
+                    if (resp.ok) {
+                        ids.forEach(function (mid) {
+                            var card = grid.querySelector('[data-media-card="' + mid + '"]');
+                            if (card) {
+                                grid.appendChild(card);
+                            }
+                        });
+                    } else {
+                        return resp.json().then(function (datos) {
+                            window.alert(datos.error || "No se pudo reordenar la galería.");
+                        });
+                    }
+                }).catch(function () {
+                    window.alert("No se pudo reordenar la galería.");
+                }).finally(function () {
+                    ocupado = false;
+                    sincronizarBotones();
+                });
+            });
+
+            sincronizarBotones();
+        }
+    });
+</script>
+{% endblock extra_scripts %}

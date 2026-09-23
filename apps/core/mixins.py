@@ -9,6 +9,8 @@ archivo no truene mientras ese modelo todavía no existe.
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 
+from .permissions import es_creador
+
 
 class RoleRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
     """
@@ -41,9 +43,31 @@ class AdminRequiredMixin(RoleRequiredMixin):
         return user.is_authenticated and getattr(user, "es_admin", False)
 
 
-# TODO (cuando exista apps.projects.models.Proyecto):
-# class ProjectCreatorRequiredMixin(RoleRequiredMixin):
-#     """Solo el creador_id del proyecto puede acceder (ver DEVMATCH-BD.md 5.2)."""
+class ProjectCreatorRequiredMixin(RoleRequiredMixin):
+    """
+    Restringe la vista a usuarios autenticados que sean el creador
+    (``creador_id``) del proyecto dueño del objeto (DEVMATCH-BD.md 5.2).
+
+    Requiere que la vista defina `model`/`get_object()` (SingleObjectMixin).
+    Funciona con un objeto Proyecto o con cualquier subentidad que tenga
+    FK `proyecto` (vacantes, media, requisitos), vía core.permissions.es_creador.
+    """
+
+    permission_denied_message = "Solo el creador del proyecto puede realizar esta acción."
+
+    def test_func(self):
+        user = self.request.user
+        if not (user and user.is_authenticated):
+            return False
+        objeto = self.get_object()
+        if objeto is None:
+            return False
+        return es_creador(user, objeto)
+
+
+# TODO (Etapa 3, con apps.teams.models.EquipoMembresia lista — ver
+# DEVMATCH-ESTRUCTURA.md):
+# class TeamMemberRequiredMixin(RoleRequiredMixin):
+#     """Solo miembros reales del proyecto (misma lógica que fn_validar_resena)."""
 #     def test_func(self):
-#         proyecto = self.get_object()
-#         return proyecto.creador_id == self.request.user.id
+#         return es_miembro_real(self.request.user, ...)

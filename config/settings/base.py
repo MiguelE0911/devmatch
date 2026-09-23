@@ -42,6 +42,12 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.accounts",
     "apps.projects",
+    "apps.applications",
+    "apps.matching",
+    "apps.teams",
+    "apps.audit",
+    "apps.reviews",
+    "apps.moderation",
 ]
 
 MIDDLEWARE = [
@@ -50,6 +56,10 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Protección global por defecto: toda vista requiere login salvo las
+    # decoradas con @login_not_required (login, registro). Debe ir después
+    # de AuthenticationMiddleware. El admin ya marca su login como exento.
+    "django.contrib.auth.middleware.LoginRequiredMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -100,19 +110,20 @@ else:
     }
 
 # --------------------------------------------------------------------------
-# NOTA IMPORTANTE PARA SQUAD A (accounts-modelos):
-#
-# Cuando definan el modelo Usuario en apps/accounts/models.py (tabla
-# `usuarios` de DEVMATCH-BD.md, sección 5.1), agrega aquí la línea:
-#
-#     AUTH_USER_MODEL = "accounts.Usuario"
-#
-# ANTES de correr `makemigrations` por primera vez. No lo dejamos puesto
-# desde ya a propósito: si se declara antes de que el modelo exista,
-# Django no arranca (ImproperlyConfigured). Como este archivo es
-# compartido, avisa en el chat del equipo antes de tocarlo (ver regla en
-# DEVMATCH-ESTRUCTURA.md).
+# AUTH_USER_MODEL: modelo custom en apps/accounts (tabla `usuarios`). Debe
+# declararse ANTES de la primera migración de la app — si se agrega después,
+# Django no arranca. Archivo compartido: avisar en el chat antes de tocarlo.
 # --------------------------------------------------------------------------
+AUTH_USER_MODEL = "accounts.Usuario"
+
+# Login del shell: el mixin LoginRequiredMixin redirige aquí. La ruta real es
+# /ingresar/ (accounts:login); sin esto, las vistas protegidas 40xean a
+# /accounts/login/ que no existe.
+LOGIN_URL = "accounts:login"
+
+# A dónde va el usuario tras iniciar sesión si el login no trae ?next=
+# (la vista de login ya lo fija en core:feed; esto cubre el default global).
+LOGIN_REDIRECT_URL = "core:feed"
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

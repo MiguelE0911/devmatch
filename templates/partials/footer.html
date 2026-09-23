@@ -1,6 +1,14 @@
-<footer class="border-t border-slate-200 py-4">
-    <div class="max-w-5xl mx-auto px-4 text-xs text-slate-400 flex justify-between">
-        <span>DevMatch &middot; Desarrollo de Software V</span>
-        <span>Etapa 1</span>
+{% load static %}
+{% comment %}
+Footer GLOBAL de DevMatch (se usa en todas las páginas del shell base.html).
+La landing NO lo usa: tiene su footer exclusivo en core/_landing_footer.html.
+Uso: ya está incluido en base.html vía {% include "partials/footer.html" %}.
+{% endcomment %}
+<footer class="border-t border-violet-200 bg-paper px-4 py-10 sm:px-6 lg:px-16">
+    <div class="mx-auto flex max-w-[1248px] flex-col items-center justify-between gap-5 sm:flex-row">
+        <a href="{% url 'core:home' %}" class="text-lg font-extrabold tracking-tight">
+            <span class="text-violet-400">DEV</span><span class="text-violet-700">MATCH</span>
+        </a>
+        <p class="text-sm text-ink/70">Syntax Error - Etapa 1</p>
     </div>
 </footer>

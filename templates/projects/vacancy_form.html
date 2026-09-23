@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}{% if vacante %}Editar vacante{% else %}Agregar vacante{% endif %} — {{ proyecto.nombre }} — DevMatch{% endblock %}
+
+{% block content %}
+<div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+    <div class="min-w-0 space-y-5">
+        {% include "projects/_proyecto_encabezado.html" with con_descripcion=False %}
+
+        <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 class="text-lg font-bold text-slate-900">
+                {% if vacante %}Editar vacante{% else %}Agregar vacante{% endif %}
+            </h2>
+            <p class="mt-1 text-sm text-slate-500">
+                {% if vacante %}Modifica los datos del rol. La cobertura y cancelación de la vacante se editan desde el estado.{% else %}Completa los datos del rol que quieres sumar al equipo.{% endif %}
+            </p>
+
+            <form method="post" class="mt-6 space-y-6">
+                {% csrf_token %}
+                {{ form.non_field_errors }}
+
+                <div>
+                    <label for="{{ form.titulo.id_for_label }}" class="mb-1.5 block text-sm font-semibold text-slate-800">
+                        {{ form.titulo.label }}
+                    </label>
+                    {{ form.titulo }}
+                    {{ form.titulo.errors }}
+                </div>
+
+                <div>
+                    <label for="{{ form.descripcion.id_for_label }}" class="mb-1.5 block text-sm font-semibold text-slate-800">
+                        {{ form.descripcion.label }}
+                    </label>
+                    {{ form.descripcion }}
+                    {{ form.descripcion.errors }}
+                </div>
+
+                <div>
+                    <label for="{{ form.cupos_totales.id_for_label }}" class="mb-1.5 block text-sm font-semibold text-slate-800">
+                        {{ form.cupos_totales.label }}
+                    </label>
+                    <p class="mb-2 text-xs leading-relaxed text-slate-500">
+                        Mínimo 1, máximo 50 por vacante.
+                    </p>
+                    {{ form.cupos_totales }}
+                    {{ form.cupos_totales.errors }}
+                </div>
+
+                {% if vacante %}
+                    <div>
+                        <label for="{{ form.estado.id_for_label }}" class="mb-1.5 block text-sm font-semibold text-slate-800">
+                            {{ form.estado.label }}
+                        </label>
+                        <div class="relative">
+                            <span id="estado-dot" class="pointer-events-none absolute left-4 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-green-500"></span>
+                            {{ form.estado }}
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                                 class="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400">
+                                <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/>
+                            </svg>
+                        </div>
+                        {{ form.estado.errors }}
+                        <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                            <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-green-500"></span>Abierta</span>
+                            <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-violet-500"></span>Cubierta</span>
+                            <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-slate-400"></span>Cancelada</span>
+                        </div>
+                    </div>
+                {% endif %}
+
+                <div>
+                    <p class="mb-2 text-sm font-semibold text-slate-800">{{ form.habilidades.label }}</p>
+                    {{ form.habilidades }}
+                    {{ form.habilidades.errors }}
+                </div>
+
+                <div>
+                    <p class="mb-2 text-sm font-semibold text-slate-800">{{ form.tecnologias.label }}</p>
+                    {{ form.tecnologias }}
+                    {{ form.tecnologias.errors }}
+                </div>
+
+                {# UI de filtro (Sin persistencia): el esquema v1 no tiene columnas #}
+                {# nivel/experiencia en vacantes. Se muestran deshabilitadas como #}
+                {# referencia visual; llegan con matching/filtros (Etapa 2+). #}
+                <div class="overflow-hidden rounded-2xl border border-slate-200">
+                    <div class="flex items-center justify-between gap-4 border-b border-slate-100 px-4 py-3">
+                        <label class="flex items-center gap-3 text-sm font-semibold text-slate-800">
+                            <input type="checkbox" disabled checked
+                                   class="h-4 w-4 rounded border-violet-300 text-violet-700 accent-violet-700">
+                            Solicitar Nivel
+                        </label>
+                        <div class="relative">
+                            <select disabled class="w-40 appearance-none rounded-xl border border-slate-200 bg-slate-50 py-2 pl-3 pr-9 text-sm text-slate-400">
+                                <option>Principiante</option>
+                                <option>Intermedio</option>
+                                <option>Avanzado</option>
+                            </select>
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                                 class="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-300">
+                                <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between gap-4 px-4 py-3">
+                        <label class="flex items-center gap-3 text-sm font-semibold text-slate-800">
+                            <input type="checkbox" disabled checked
+                                   class="h-4 w-4 rounded border-violet-300 text-violet-700 accent-violet-700">
+                            Solicitar años de experiencia
+                        </label>
+                        <input type="number" min="0" value="1" disabled
+                               class="w-40 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-400">
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-3">
+                    <a href="{% url 'projects:project_detail' proyecto.pk %}"
+                       class="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50">
+                        Cancelar
+                    </a>
+                    <button type="submit"
+                            class="inline-flex items-center gap-2 rounded-full bg-violet-700 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-violet-800">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4">
+                            <path d="M12 9a3.75 3.75 0 1 0 0 7.5A3.75 3.75 0 0 0 12 9Z"/>
+                            <path fill-rule="evenodd" d="M9.344 3.071a49.52 49.52 0 0 1 5.312 0c.967.052 1.83.585 2.332 1.39l.821 1.317c.24.383.645.643 1.11.71.386.054.77.113 1.152.177 1.432.239 2.429 1.493 2.429 2.909V18a3 3 0 0 1-3 3h-15a3 3 0 0 1-3-3V9.574c0-1.416.997-2.67 2.429-2.909.382-.064.766-.123 1.151-.178a1.56 1.56 0 0 0 1.11-.71l.822-1.315a2.942 2.942 0 0 1 2.332-1.39ZM6.75 12.75a5.25 5.25 0 1 1 10.5 0 5.25 5.25 0 0 1-10.5 0Zm12-1.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z" clip-rule="evenodd"/>
+                        </svg>
+                        {% if vacante %}Guardar cambios{% else %}Agregar vacante{% endif %}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <aside class="space-y-5">
+        {% include "projects/_requisitos.html" %}
+        {% include "projects/_equipo.html" %}
+    </aside>
+</div>
+{% endblock content %}
+
+{% block extra_scripts %}
+{% if vacante %}
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        var select = document.getElementById("{{ form.estado.id_for_label }}");
+        var dot = document.getElementById("estado-dot");
+        var colores = { abierta: "bg-green-500", cubierta: "bg-violet-500", cancelada: "bg-slate-400" };
+        if (select && dot) {
+            var actualizar = function () {
+                dot.className = "pointer-events-none absolute left-4 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full " +
+                    (colores[select.value] || "bg-green-500");
+            };
+            select.addEventListener("change", actualizar);
+            actualizar();
+        }
+    });
+</script>
+{% endif %}
+{% endblock extra_scripts %}

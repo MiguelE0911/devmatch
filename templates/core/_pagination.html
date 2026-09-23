@@ -1,0 +1,61 @@
+{% comment %}
+Paginación del feed (spec "Home", §7): `‹ Atrás [1] 2 3 … 10 Siguiente ›`
+centrada; chip activo blanco con borde violeta, inactivos sobre violeta-100.
+Usos:
+  {% include "core/_pagination.html" %}
+Requiere de la vista: page_obj, is_paginated, page_numbers (lista de strings,
+con "…" para los huecos) y query_sin_pagina (query params sin `pagina`).
+{% endcomment %}
+{% if is_paginated %}
+<nav class="mt-12 flex flex-wrap items-center justify-center gap-2" aria-label="Paginación del feed">
+
+    {% if page_obj.has_previous %}
+        <a href="?{% if query_sin_pagina %}{{ query_sin_pagina }}&{% endif %}pagina={{ page_obj.previous_page_number }}"
+           class="inline-flex items-center gap-1 rounded-[10px] px-3 py-2 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                <path d="m11 19-7-7 7-7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Atrás
+        </a>
+    {% else %}
+        <span class="inline-flex items-center gap-1 rounded-[10px] px-3 py-2 text-sm font-semibold text-slate-300">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                <path d="m11 19-7-7 7-7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Atrás
+        </span>
+    {% endif %}
+
+    {% for numero in page_numbers %}
+        {% if numero == "…" %}
+            <span class="px-2 py-2 text-sm font-semibold text-violet-700">…</span>
+        {% elif numero == page_obj.number|stringformat:"s" %}
+            <span class="rounded-[10px] border-2 border-violet-700 bg-white px-3 py-1.5 text-sm font-bold text-violet-700">
+                {{ numero }}
+            </span>
+        {% else %}
+            <a href="?{% if query_sin_pagina %}{{ query_sin_pagina }}&{% endif %}pagina={{ numero }}"
+               class="rounded-[10px] bg-violet-100 px-3 py-1.5 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-200">
+                {{ numero }}
+            </a>
+        {% endif %}
+    {% endfor %}
+
+    {% if page_obj.has_next %}
+        <a href="?{% if query_sin_pagina %}{{ query_sin_pagina }}&{% endif %}pagina={{ page_obj.next_page_number }}"
+           class="inline-flex items-center gap-1 rounded-[10px] px-3 py-2 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50">
+            Siguiente
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                <path d="m13 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </a>
+    {% else %}
+        <span class="inline-flex items-center gap-1 rounded-[10px] px-3 py-2 text-sm font-semibold text-slate-300">
+            Siguiente
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                <path d="m13 5 7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </span>
+    {% endif %}
+</nav>
+{% endif %}
