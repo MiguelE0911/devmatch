@@ -44,6 +44,33 @@
                     {{ form.logo_url.errors }}
                 </div>
 
+                <div>
+                    <label for="{{ form.estado.id_for_label }}" class="mb-1.5 block text-sm font-semibold text-slate-800">
+                        {{ form.estado.label }}
+                    </label>
+                    <div class="relative">
+                        <span id="estado-dot" class="pointer-events-none absolute left-4 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-slate-400"></span>
+                        {{ form.estado }}
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                             class="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400">
+                            <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/>
+                        </svg>
+                    </div>
+                    {{ form.estado.errors }}
+                    <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                        <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-slate-400"></span>Borrador</span>
+                        <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-violet-500"></span>Publicado</span>
+                        <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-green-500"></span>Reclutando</span>
+                        <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-cyan-500"></span>Equipo completo</span>
+                        <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-amber-500"></span>En desarrollo</span>
+                        <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-emerald-500"></span>Finalizado</span>
+                        <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-rose-500"></span>Cancelado</span>
+                    </div>
+                    <p class="mt-2 text-xs leading-relaxed text-slate-500">
+                        Solo se muestran los estados alcanzables desde el estado actual.
+                    </p>
+                </div>
+
                 <div class="flex items-center justify-end gap-3">
                     <a href="{% url 'projects:project_detail' proyecto.pk %}"
                        class="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50">
@@ -67,3 +94,29 @@
     </aside>
 </div>
 {% endblock content %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        var select = document.getElementById("{{ form.estado.id_for_label }}");
+        var dot = document.getElementById("estado-dot");
+        var colores = {
+            borrador: "bg-slate-400",
+            publicado: "bg-violet-500",
+            reclutando: "bg-green-500",
+            equipo_completo: "bg-cyan-500",
+            en_desarrollo: "bg-amber-500",
+            finalizado: "bg-emerald-500",
+            cancelado: "bg-rose-500",
+        };
+        if (select && dot) {
+            var actualizar = function () {
+                dot.className = "pointer-events-none absolute left-4 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full " +
+                    (colores[select.value] || "bg-slate-400");
+            };
+            select.addEventListener("change", actualizar);
+            actualizar();
+        }
+    });
+</script>
+{% endblock extra_scripts %}

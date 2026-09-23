@@ -287,6 +287,57 @@ class Command(BaseCommand):
                 "vacantes": [],
             },
             {
+                "creador": "juan@devmatch.local",
+                "nombre": "PetMatch — Adopción responsable",
+                "descripcion": "Conectar refugios con familias adoptantes y dar seguimiento a las adopciones.",
+                "estado": Proyecto.ESTADO_RECLUTANDO,
+                "media": [],
+                "vacantes": [
+                    {
+                        "titulo": "Fullstack Developer",
+                        "descripcion": "Formularios de adopción y panel de refugios.",
+                        "estado": Vacante.ESTADO_ABIERTA,
+                        "cupos_totales": 2,
+                        "habilidades": ["Fullstack Development"],
+                        "tecnologias": ["JavaScript", "Django"],
+                    },
+                ],
+            },
+            {
+                "creador": "maria@devmatch.local",
+                "nombre": "ResuMate — Optimizador de CV",
+                "descripcion": "Sugerencias automáticas para armar un CV orientado a reclutadores tech.",
+                "estado": Proyecto.ESTADO_PUBLICADO,
+                "media": [],
+                "vacantes": [
+                    {
+                        "titulo": "Backend Developer",
+                        "descripcion": "Motor de sugerencias y análisis del CV.",
+                        "estado": Vacante.ESTADO_ABIERTA,
+                        "cupos_totales": 2,
+                        "habilidades": ["Backend Development"],
+                        "tecnologias": ["Python", "Django"],
+                    },
+                ],
+            },
+            {
+                "creador": "juan@devmatch.local",
+                "nombre": "GymLog — Entrenamientos colaborativos",
+                "descripcion": "Rutinas compartidas y seguimiento de progreso entre estudiantes.",
+                "estado": Proyecto.ESTADO_RECLUTANDO,
+                "media": [],
+                "vacantes": [
+                    {
+                        "titulo": "Frontend Developer",
+                        "descripcion": "Interfaz de rutinas y gráficos de progreso.",
+                        "estado": Vacante.ESTADO_ABIERTA,
+                        "cupos_totales": 1,
+                        "habilidades": ["Frontend Development"],
+                        "tecnologias": ["React"],
+                    },
+                ],
+            },
+            {
                 "creador": "maria@devmatch.local",
                 "nombre": "MarketAI — IA de precios",
                 "descripcion": "Motor piloto de estimación de precios que no llegó a validarse.",

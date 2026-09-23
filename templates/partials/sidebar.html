@@ -7,8 +7,7 @@ sobrescribe {% block sidebar %} en base.html con vacío.
 {% endcomment %}
 <aside class="sticky top-16 z-20 hidden h-[calc(100vh-4rem)] w-[125px] shrink-0 border-r border-violet-100 bg-paper md:block">
     <nav class="flex h-full flex-col items-center gap-7 overflow-y-auto py-8">
-        {# TODO: cuando exista el home interno (post-login), aquí debe ir y no al landing. #}
-        <a href="{% url 'core:home' %}" class="group flex w-full flex-col items-center gap-1.5" title="Home">
+        <a href="{% url 'core:feed' %}" class="group flex w-full flex-col items-center gap-1.5" title="Home">
             <span class="flex h-11 w-11 items-center justify-center rounded-[14px] bg-violet-700 text-white transition-colors group-hover:bg-violet-800">
                 <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>

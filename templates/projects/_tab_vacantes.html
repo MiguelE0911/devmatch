@@ -112,8 +112,8 @@
 
                 <div class="mt-8 flex justify-end">
                     {% if vacante.puede_postularse %}
-                        {# TODO Etapa 2: vincular con la postulación real (POST a apps/applications). #}
-                        <button type="button" title="Disponible en la Etapa 2"
+                        {# Se agregó data-modal-toggle para disparar el modal frontend #}
+                        <button type="button" data-modal-toggle="modal-postulacion"
                                 class="inline-flex items-center gap-2 rounded-full bg-violet-700 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-violet-800">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4">
                                 <path fill-rule="evenodd" d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" clip-rule="evenodd"/>
@@ -146,5 +146,32 @@
             {% endif %}
         </div>
     {% endif %}
+    </div>
+</div>
+
+<div id="modal-postulacion" class="fixed inset-0 z-[10000] hidden items-center justify-center bg-slate-900/40 p-4 font-montserrat backdrop-blur-sm">
+    <div class="relative w-full max-w-lg rounded-3xl bg-white p-10 text-center shadow-2xl">
+        
+        <div class="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-violet-50 text-violet-700">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="h-10 w-10">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+        </div>
+
+        <h3 class="mt-6 text-2xl font-bold text-slate-900">¡Postulación enviada!</h3>
+        
+        <p class="mt-4 text-base font-semibold text-slate-700">
+            Tu postulación ha sido enviada correctamente.
+        </p>
+        <p class="mt-2 text-sm text-slate-500">
+            El creador del proyecto revisará tu perfil y se pondrá en contacto contigo si estás seleccionado.
+        </p>
+
+        <div class="mt-10">
+            <button type="button" data-modal-close="modal-postulacion"
+                    class="rounded-xl bg-violet-700 px-8 py-3 text-sm font-bold text-white transition-colors hover:bg-violet-800">
+                Entendido
+            </button>
+        </div>
     </div>
 </div>
