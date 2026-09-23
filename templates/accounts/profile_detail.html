@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}{{ usuario.get_full_name|default:usuario.username }} — DevMatch{% endblock %}
+{% block title %}{{ usuario.nombre_completo }} — DevMatch{% endblock %}
 
 {% block content %}
 <div class="space-y-8 bg-[#F8F7FF]">

@@ -80,6 +80,14 @@ def _intereses_del_usuario(usuario):
     return Interes.objects.filter(id__in=ids, es_activo=True).order_by("nombre")
 
 
+def _nombre_completo(usuario):
+    """Nombre visible: 'Nombre Apellido', o el username si no hay nombre de
+    pila/apellido (Usuario no hereda AbstractUser, así que get_full_name no
+    existe en el modelo real)."""
+    nombre = f"{usuario.first_name} {usuario.last_name}".strip()
+    return nombre or usuario.username
+
+
 def agrupar_habilidades(usuario):
     """Devuelve [{grupo, habilidades: [...]}...] solo con los grupos que tengan
     chips, para la card "Habilidades" de la vista de perfil."""
@@ -106,6 +114,7 @@ class ProfileDetailView(LoginRequiredMixin, TemplateView):
 
         ctx["usuario"] = usuario
         ctx["perfil"] = perfil
+        usuario.nombre_completo = _nombre_completo(usuario)
         ctx["grupos_habilidades"] = agrupar_habilidades(usuario)
         ctx["tecnologias"] = _tecnologias_del_usuario(usuario)
         ctx["intereses"] = _intereses_del_usuario(usuario)
@@ -122,6 +131,7 @@ class ProfileDetailView(LoginRequiredMixin, TemplateView):
         )
         for resena in resenas:
             resena.creado_hace = hace_relativo(resena.creado_en)
+            resena.autor_nombre = _nombre_completo(resena.autor)
         ctx["resenas"] = resenas
         ctx["resenas_count"] = resenas.count()
         return ctx

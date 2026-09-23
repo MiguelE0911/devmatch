@@ -23,7 +23,7 @@ autor + tiempo relativo (hace_relativo de projects.views).
                                 {{ resena.autor.first_name|first|default:resena.autor.username|first }}{{ resena.autor.last_name|first }}
                             </span>
                             <div>
-                                <p class="text-sm font-bold text-slate-900">{{ resena.autor.get_full_name|default:resena.autor.username }}</p>
+                                <p class="text-sm font-bold text-slate-900">{{ resena.autor_nombre }}</p>
                                 <p class="text-xs text-[#3B4A6B]">{{ resena.creado_hace }}</p>
                             </div>
                         </div>

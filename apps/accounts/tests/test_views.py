@@ -149,6 +149,19 @@ class ProfileDetailViewTests(TestCase):
         self.assertContains(resp, "perfil_user")
         self.assertTrue(Perfil.objects.filter(usuario=self.usuario).exists())
 
+    def test_muestra_nombre_completo_en_el_header(self):
+        self.usuario.first_name = "Ana"
+        self.usuario.last_name = "Ríos"
+        self.usuario.save(update_fields=["first_name", "last_name"])
+        self.client.force_login(self.usuario)
+        resp = self.client.get(self.url)
+        self.assertContains(resp, "Ana Ríos")
+
+    def test_sin_nombre_muestra_el_username_en_el_header(self):
+        self.client.force_login(self.usuario)
+        resp = self.client.get(self.url)
+        self.assertContains(resp, "perfil_user")
+
     def test_get_crea_perfil_si_no_existe(self):
         self.client.force_login(self.usuario)
         self.client.get(self.url)
