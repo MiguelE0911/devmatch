@@ -56,6 +56,10 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Protección global por defecto: toda vista requiere login salvo las
+    # decoradas con @login_not_required (login, registro). Debe ir después
+    # de AuthenticationMiddleware. El admin ya marca su login como exento.
+    "django.contrib.auth.middleware.LoginRequiredMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -116,6 +120,10 @@ AUTH_USER_MODEL = "accounts.Usuario"
 # /ingresar/ (accounts:login); sin esto, las vistas protegidas 40xean a
 # /accounts/login/ que no existe.
 LOGIN_URL = "accounts:login"
+
+# A dónde va el usuario tras iniciar sesión si el login no trae ?next=
+# (la vista de login ya lo fija en core:feed; esto cubre el default global).
+LOGIN_REDIRECT_URL = "core:feed"
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
