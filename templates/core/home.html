@@ -34,8 +34,7 @@
                     </p>
 
                     <div class="mt-9 flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
-                        {% comment %}TODO Squad B (projects): re-apuntar a {% url 'projects:create' %} cuando exista la vista de alta (requiere sesión).{% endcomment %}
-                        <a href="{% url 'accounts:register' %}"
+                        <a href="{% url 'accounts:login' %}?next={% url 'projects:project_create' %}"
                            class="rounded-full bg-violet-700 px-7 py-3.5 text-center text-sm font-bold text-white shadow-lg shadow-violet-950/30 transition-colors hover:bg-violet-800 sm:w-auto">
                             Publicar un proyecto
                         </a>
@@ -480,8 +479,7 @@
                     <p class="mt-4 leading-relaxed text-white/90">
                         Publícala, define tus vacantes y deja que el sistema te acerque al talento que te falta.
                     </p>
-                    {% comment %}TODO Squad B (projects): re-apuntar a {% url 'projects:create' %} cuando exista la vista de alta (requiere sesión).{% endcomment %}
-                    <a href="{% url 'accounts:register' %}"
+                    <a href="{% url 'accounts:login' %}?next={% url 'projects:project_create' %}"
                        class="mt-8 block rounded-full bg-white px-7 py-3.5 text-center text-sm font-bold text-violet-700 shadow-sm transition-colors hover:bg-violet-100 sm:inline-block">
                         Publicar un proyecto
                     </a>
@@ -492,7 +490,7 @@
                     <p class="mt-4 leading-relaxed text-ink">
                         Crea tu perfil técnico y descubre qué proyectos encajan mejor con lo que sabes hacer.
                     </p>
-                    <a href="{% url 'accounts:register' %}"
+                    <a href="{% url 'accounts:login' %}?next={% url 'core:feed' %}"
                        class="mt-8 block rounded-full border-2 border-violet-700 px-7 py-3 text-center text-sm font-bold text-violet-700 transition-colors hover:bg-violet-700 hover:text-white sm:inline-block">
                         Crear mi cuenta
                     </a>

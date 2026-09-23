@@ -547,6 +547,19 @@ class ProyectoCreateView(LoginRequiredMixin, CreateView):
     form_class = ProyectoForm
     template_name = "projects/project_create.html"
 
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        # La X / Cancelar del modal vuelven a la vista previa del shell
+        # (?next llega desde parciales/sidebar) o al feed interno por defecto —
+        # nunca a la landing. Solo se aceptan URLs internas (open redirect).
+        next_url = self.request.GET.get("next", "")
+        ctx["volver"] = (
+            next_url
+            if next_url.startswith("/") and not next_url.startswith("//")
+            else reverse("core:feed")
+        )
+        return ctx
+
     def form_valid(self, form):
         form.instance.creador = self.request.user
         form.instance.es_activo = True
