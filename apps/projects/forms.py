@@ -49,7 +49,7 @@ class ProyectoForm(InputClassesMixin, forms.ModelForm):
             "descripcion": forms.Textarea(
                 attrs={
                     "rows": 5,
-                    "placeholder": "Contá de qué trata el proyecto...",
+                    "placeholder": "Cuenta de qué trata el proyecto...",
                     "class": InputClassesMixin.input_cls,
                 }
             ),
