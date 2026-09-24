@@ -17,6 +17,7 @@ db.sqlite3
 .env
  
 # Node / Tailwind
+static/dist/output.css
 node_modules/
  
 # Editor / SO
