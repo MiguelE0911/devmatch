@@ -81,20 +81,21 @@ class ProyectoForm(InputClassesMixin, forms.ModelForm):
         }
         if self._estado_original == Proyecto.ESTADO_CANCELADO:
             opciones.add(Proyecto.ESTADO_CANCELADO)
-        self.fields["estado"] = forms.ChoiceField(
-            choices=[
-                (valor, etiqueta)
-                for valor, etiqueta in Proyecto.ESTADO_CHOICES
-                if valor in opciones
-            ],
-            initial=self._estado_original,
-            label="Estado del proyecto",
-            widget=forms.Select(
-                attrs={
-                    "class": "w-64 appearance-none rounded-xl border border-slate-300 bg-white py-2.5 pl-9 pr-10 text-sm font-medium text-slate-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100",
-                }
-            ),
-        )
+        if self.instance.pk:
+            self.fields["estado"] = forms.ChoiceField(
+                choices=[
+                    (valor, etiqueta)
+                    for valor, etiqueta in Proyecto.ESTADO_CHOICES
+                    if valor in opciones
+                ],
+                initial=self._estado_original,
+                label="Estado del proyecto",
+                widget=forms.Select(
+                    attrs={
+                        "class": "w-64 appearance-none rounded-xl border border-slate-300 bg-white py-2.5 pl-9 pr-10 text-sm font-medium text-slate-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-100",
+                    }
+                ),
+            )
 
     def clean_estado(self):
         nuevo_estado = self.cleaned_data.get("estado")
