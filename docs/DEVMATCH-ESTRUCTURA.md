@@ -1,7 +1,7 @@
 # DEVMATCH - ESTRUCTURA
 
 Materia: Desarrollo de Software V
-Ultima actualización: September 11, 2026
+Ultima actualización: Octubre 4, 2026
 
 # ESTRUCTURA DE DIRECTORIOS (base completa de referencia para todo el proyecto)
 
@@ -86,7 +86,7 @@ devmatch/
 │       └── services.py
 ├── templates/
 │   ├── base.html
-│   ├── partials/ (navbar.html, footer.html, alerts.html)
+│   ├── partials/ (topbar.html, sidebar.html, footer.html, alerts.html)
 │   ├── core/
 │   │   └── home.html            # página de inicio / estado de la DB
 │   ├── accounts/
@@ -137,6 +137,9 @@ devmatch/
 │   │   ├── urls.py              # ruta base "" → core:home
 │   │   ├── mixins.py
 │   │   ├── permissions.py
+│   │   ├── migrations/
+│   │   │   ├── __init__.py
+│   │   │   └── 0001_triggers_postgres.py   # instala las 6 funciones y 19 triggers (RunSQL)
 │   │   ├── templatetags/
 │   │   │   ├── __init__.py
 │   │   │   └── core_extras.py   # simple_tag active_link para el navbar
@@ -147,7 +150,8 @@ devmatch/
 │   │   │       └── seed_data.py
 │   │   └── tests/
 │   │       ├── __init__.py
-│   │       └── test_home_view.py
+│   │       ├── test_home_view.py
+│   │       └── test_triggers.py       # anti-drift: catálogo real vs. devmatch_schema_v1.sql
 │   ├── accounts/
 │   │   ├── __init__.py
 │   │   ├── models.py
@@ -170,11 +174,13 @@ devmatch/
 │       ├── migrations/
 │       │   └── __init__.py
 │       └── tests/
-│           └── __init__.py
+│           ├── __init__.py
+│           └── helpers.py            # lleva_a() / camino_valido(): recorre la máquina de estados
 ├── templates/
 │   ├── base.html
 │   ├── partials/
-│   │   ├── navbar.html
+│   │   ├── topbar.html                # barra superior del shell (canonical)
+│   │   ├── sidebar.html               # menú lateral del shell (canonical)
 │   │   ├── footer.html
 │   │   └── alerts.html
 │   ├── core/
@@ -192,12 +198,31 @@ devmatch/
 │   ├── src/
 │   │   └── input.css
 │   ├── dist/
-│   │   └── output.css
+│   │   └── output.css           # ⚠️ IGNORADO por git — se genera local
 │   └── img/
 │       └── .gitkeep
 └── media/
     └── .gitkeep
 ```
+
+> **`static/dist/output.css` está en `.gitignore` a propósito.** Es un artefacto construido por
+> Tailwind, no fuente. Si lo commiteas, cada cambio de clases obliga a todos a reconstruir por
+> su cuenta y los conflictos de merge en un CSS minificado son ilegibles. **Cada persona lo
+> genera en su máquina:**
+>
+> ```bash
+> npm install
+> npm run build:css      # una vez, para tener el archivo
+> npm run watch:css      # y lo deja escuchando mientras trabaja
+> ```
+>
+> Si abres un PR y tu teammate no ve los estilos, casi siempre es esto: no corrieron
+> `npm run build:css`. No arregles el CSS en el repo.
+
+> **Sobre `apps/core/migrations/`:** no es una app con modelos, pero sí tiene migraciones.
+> Es el hogar de la migración transversal que instala los triggers. No agregues modelos a
+> `core` — su función es transversal (salud, mixins, permisos, y ahora el DDL de las
+> garantías de la base). Los modelos van en la app que les corresponde.
 
 > **Nota:** dentro de `accounts/models.py` y `projects/models.py`, dejen los campos de relación (`ForeignKey`, `ManyToMany`) que ya se sabe que van a necesitar las etapas siguientes (ej. relación Usuario→Postulación, Proyecto→Vacante→Membresía), aunque el modelo del otro lado todavía no exista. Así cuando se cree la app `applications` en la Etapa 2, la conexión ya está prevista y no toca alterar una tabla que ya está en producción/demo.
 > 

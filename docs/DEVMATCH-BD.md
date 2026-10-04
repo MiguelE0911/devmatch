@@ -1,7 +1,7 @@
 # DEVMATCH - BASE DE DATOS
 
 Materia: Desarrollo de Software V
-Ultima actualización: September 19, 2026
+Ultima actualización: Octubre 4, 2026
 
 # Documentación de la Base de Datos — DevMatch V2.0
 
@@ -325,6 +325,33 @@ Cuando se ejecuta `python manage.py migrate`, Django crea **siete tablas propias
 
 Esta sección es la más importante para backend: explica comportamientos que ocurren **solos**, sin que tu código de Django tenga que pedirlos.
 
+Son **6 funciones y 19 triggers**, distribuidos así:
+
+| Función | Triggers que crea | Tablas afectadas |
+| --- | --- | --- |
+| `fn_set_updated_at` | 5 | `usuarios`, `perfiles`, `proyectos`, `vacantes`, `postulaciones` |
+| `fn_actualizar_cupos_vacante` | 1 | `equipos_membresias` |
+| `fn_validar_transicion_proyecto` | 1 | `proyectos` |
+| `fn_validar_resena` | 1 | `resenas` |
+| `fn_prevenir_borrado_fisico` | 10 | las de historial (ver 6.5) |
+| `fn_inmutable_auditoria` | 1 | `auditoria_logs` |
+
+### Dónde viven en Django (importante)
+
+Desde la Etapa 1 estos triggers **no viven solo en el `.sql`**: están instalados también por
+`apps/core/migrations/0001_triggers_postgres.py`, que los crea con `RunSQL`. Dos consecuencias
+prácticas:
+
+- La base de datos **de pruebas** (`test_*`) también los tiene. Tus tests de modelos ejercitan
+  las garantías reales: un `DELETE` sobre `vacantes` **falla** en los tests igual que en
+  producción. Antes de esa migración, los tests describían cascadas que en producción abortan.
+- **`docs/devmatch_schema_v1.sql` es la especificación, no el mecanismo en sí.** Si alguien
+  edita el `.sql` esperando cambiar el comportamiento, no lo afectará: el comportamiento lo
+  define la migración. `apps/core/tests/test_triggers.py` existe justamente para detectar esa
+  divergencia (compara catálogo real vs. `.sql`) y falla si se separan.
+
+Cuando modifiques un trigger, edita **ambos** lugares y corre los tests de `apps.core`.
+
 ### 6.1 `fn_set_updated_at` — mantenimiento de `actualizado_en`
 
 Se dispara `BEFORE UPDATE` en `usuarios`, `perfiles`, `proyectos`, `vacantes` y `postulaciones`. Simplemente pone `actualizado_en = now()` en cada `UPDATE`.
@@ -357,7 +384,24 @@ Se dispara `BEFORE UPDATE OF estado` en `proyectos`. Rechaza cualquier transici�
 
 Además, rellena automáticamente `finalizado_en` o `cancelado_en` según corresponda.
 
-**Para tu código:** esto es una **salvaguarda adicional**, no un reemplazo de la validación en `projects/services.py`. Implementa la misma lógica (o una más matizada, con mensajes de error específicos) en Django, porque ahí es donde le muestras al usuario un mensaje amigable — este trigger solo existe para que, pase lo que pase en el código de la aplicación, una transición inválida sea **imposible de persistir**. Si algo se te escapa en Django, el trigger lo detendrá con un `IntegrityError`/`OperationalError` que debes capturar.
+**Para tu código:** esto es una **salvaguarda adicional**, no un reemplazo de la validación en `projects/services.py`. Implementa la misma lógica (o una más matizada, con mensajes de error específicos) en Django, porque ahí es donde le muestras al usuario un mensaje amigable — este trigger solo existe para que, pase lo que pase en el código de la aplicación, una transición inválida sea **imposible de persistir**. Si algo se te escapa en Django, el trigger lo detendrá con una excepción que debes capturar.
+
+⚠️ **Qué excepción capturar exactamente:** un `RAISE EXCEPTION` de plpgsql sale con SQLSTATE `P0001`, que el driver mapea a `ProgrammingError`, y Django lo traduce a `django.db.ProgrammingError`. Esa clase es **padre** de `IntegrityError`, no hija. Por lo tanto:
+
+```python
+# MAL — ProgrammingError NO es subclase de IntegrityError; este assert falla
+# aunque el trigger haya hecho su trabajo.
+with self.assertRaises(IntegrityError):
+    proyecto.estado = "finalizado"
+    proyecto.save()
+
+# BIEN — captura tanto el error del trigger como el de una restricción.
+with self.assertRaises(DatabaseError):
+    with transaction.atomic():   # obligatorio: si no, la transacción queda
+        ...                       # abortada y todo lo que sigue revienta
+```
+
+Fuera de un `TestCase`, lo mismo aplica dentro de una vista: envuelve la escritura en `transaction.atomic()` o el error abortará la transacción entera y contaminará las consultas posteriores.
 
 ### 6.4 `fn_validar_resena` — reseñas verificadas
 
@@ -383,6 +427,26 @@ deshabilitando este trigger manualmente desde la base de datos.
 **No se aplica** (a propósito) a: los catálogos (`habilidades`, `tecnologias`, `intereses` — pueden borrarse si nadie los usa), las tablas puente (`usuarios_habilidades`, etc. — editar una asociación es normal), y `configuracion_pesos_matching` (ya protegida de otra forma, ver 5.3).
 
 **Para tu código:** en Django, esto significa que **nunca debes exponer `.delete()`** sobre estos modelos desde una vista o un endpoint — ni siquiera detrás de un permiso de administrador. La acción "Eliminar" en la interfaz debe traducirse siempre a un `UPDATE` que ponga `es_activo=false` (o el `estado` terminal correspondiente cuando no exista `es_activo`), más un registro en `auditoria_logs`. Si algún código intentara un `.delete()` real, Postgres lo rechazará con una excepción — trátalo como un bug a corregir, no como algo que debas capturar y ocultar.
+
+⚠️ **Esta protección depende del rol de base de datos, no solo del trigger.** El mensaje de error
+de arriba dice "incluso un administrador", y es cierto para el *superusuario* de Neon. Pero un
+trigger no puede defenderse de quien tenga permiso de `ALTER TABLE`: ese rol puede ejecutar
+`ALTER TABLE vacantes DISABLE TRIGGER trg_bloquear_borrado_vacantes` y borrar todo. Por eso la
+configuración de producción usa **dos roles distintos**:
+
+| Rol | Para qué | Permisos |
+| --- | --- | --- |
+| Rol de migraciones | `python manage.py migrate` | propiedad de las tablas (puede `ALTER`) |
+| Rol de runtime | la aplicación web | solo `SELECT`/`INSERT`/`UPDATE`/`DELETE` sobre las tablas de la app |
+
+El rol de runtime **no** puede desactivar triggers, así que la garantía es real. Nunca uses el
+rol de migraciones en la aplicación: si se filtra una credencial, el atacante no solo puede
+insertar filas, puede reescribir el schema y borrar el historial entero.
+
+Ninguna de las 6 funciones usa `SECURITY DEFINER`, y eso es intencional: un trigger normal se
+ejecuta con los permisos del rol de runtime, que es justo lo que queremos. Si alguna vez
+necesitas `SECURITY DEFINER`, fija `SET search_path` dentro de la función o quedarás
+expuesto a inyección de esquema.
 
 ### 6.6 `fn_inmutable_auditoria` — inmutabilidad total del log de auditoría
 

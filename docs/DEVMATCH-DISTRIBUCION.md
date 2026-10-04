@@ -1,7 +1,7 @@
 # DEVMATCH - DISTRIBUCIÓN
 
 Materia: Desarrollo de Software V
-Ultima actualización: Septiembre 10, 2026 2:16 AM
+Ultima actualización: Octubre 4, 2026
 
 # ORGANIZACIÓN Y DISTRIBUCIÓN DE TRABAJO – DEVMATCH
 
@@ -238,7 +238,46 @@ Antes de subir tu rama y abrir el Pull Request, verifica estos puntos. Esto evit
 □ Si tocaste modelos: las migraciones están generadas y committeadas
 □ No dejaste código comentado o prints de debug
 □ Actualizaste solo los archivos que te correspondían según tu rama de tarea
+□ Corriste los tests de tu app y pasan (ver más abajo cómo)
 ```
+
+### CÓMO CORRER LOS TESTS (léelo antes de reportar "terminado")
+
+El proyecto usa el runner de Django, no pytest. Y hay un detalle de Neon que hace que el
+comando "normal" falle:
+
+```bash
+python manage.py test apps --noinput --keepdb
+```
+
+**`--keepdb` no es opcional.** La base de datos es Neon (PostgreSQL compartido a través de
+PgBouncer). Sin `--keepdb`, Django intenta crear y destruir una base `test_*` en cada corrida
+y el paso de borrado falla con:
+
+```
+database "test_devmatch_db" is being accessed by other users
+```
+
+No es un problema de tu código: es que PgBouncer mantiene conexiones abiertas sobre la base de
+prueba. Con `--keepdb` Django reutiliza la base entre corridas y no intenta borrarla.
+
+**La corrida completa es lenta contra Neon** (del orden de 30+ minutos, por la latencia de red
+en cada una de las cientos de consultas). Si necesitas iterar rápido, corre solo tu app:
+
+```bash
+python manage.py test apps.projects --noinput --keepdb
+python manage.py test apps.projects.tests.test_models.ProyectoModelTests --noinput --keepdb
+```
+
+Un fallo de test casi siempre es `ProgrammingError` con un mensaje que viene del trigger, no
+de Django. Ver la Sección 6 de `DEVMATCH-BD.md` para qué excepción capturar y por qué
+`assertRaises(IntegrityError)` no funciona con triggers.
+
+### DATOS SEMILLA Y MOCKING (para maquetar sin esperar al backend)
+
+Squad B puede poblar la base sin depender de que Squad A termine. Ver la sección de comandos
+de `AGENTS.md`. Los fixtures se generan con `python manage.py seed_data` y son de solo lectura
+para tu trabajo — no los edites a mano, se regeneran.
 
 ### PROTECCIÓN DE RAMAS EN GITHUB (configuración técnica, no solo acuerdo verbal)
 
@@ -250,6 +289,30 @@ Para que la regla de "nadie hace push directo a `main` ni a `etapa-N-base`" no d
 4. Repetir el mismo proceso para `etapa-1-base` (y para cada `etapa-N-base` que se cree más adelante).
 
 Con esto, aunque alguien intente hacer push directo a esas ramas por error, GitHub lo va a rechazar automáticamente — el error se vuelve imposible en vez de solo "no recomendado".
+
+### TAGS DE CIERRE DE ETAPA
+
+Cada etapa se cierra con un tag anotado en `main`, para que siempre exista un punto de
+retorno con nombre y no dependas del historial de commits.
+
+| Tag | Commit | Qué marca |
+| --- | --- | --- |
+| `v1.0-etapa-1` | `8ae906e` | Cierre de la Etapa 1: los 19 triggers instalados también en la base de pruebas, suite en verde salvo 4 fallos preexistentes de `LoginRequiredMiddleware` |
+
+Crear el siguiente:
+
+```bash
+git tag -a v1.0-etapa-2 -F tagmsg.txt   # desde main, con el mensaje en un archivo
+git push origin v1.0-etapa-2
+```
+
+Usa `-F` con un archivo, no `-m`: escribir el mensaje con `-m` en PowerShell ha producido
+mensajes corruptos por el escapado de acentos (`Postgresthin` en lugar de `Postgres en`).
+
+Existe además un tag local `archivo/etapa-1-projects-creacion` que nunca se subió al remoto y
+que apunta a un commit (`e94f62b`) que **no** está integrado en `main`. Se puede borrar con
+`git tag -d archivo/etapa-1-projects-creacion` si se quiere limpiar el clon; no afecta a nadie
+más porque nunca existió en GitHub.
 
 ### RESUMEN DE LO QUE NUNCA DEBEN HACER
 

@@ -1,7 +1,7 @@
 # DEVMATCH - DISEÑO FRONTEND
 
 Materia: Desarrollo de Software V
-Ultima actualización: September 20, 2026
+Ultima actualización: Octubre 4, 2026
 
 # Modus operandi del frontend — DevMatch
 
@@ -34,7 +34,9 @@ Reglas de oro:
 | `static/src/input.css` | Entrada de build de Tailwind + estilos de selection/focus/caret/scrollbar. | No (capa base; cambios con aviso). |
 | `static/dist/output.css` | CSS compilado (se sirve al navegador). **Nunca se edita a mano.** | No: se regenera con `npm run build:css`. |
 | `templates/base.html` | Shell compartido de las páginas funcionales (nav/footer/alerts del shell). | No: propiedad del Integrador (solicitar cambios por chat/PR). |
-| `templates/partials/navbar.html` | Navbar del **interior de la web** (shell, tonos slate). La landing tiene el suyo exclusivo. | No: propiedad del Integrador. |
+| `templates/partials/topbar.html` | Barra superior del **interior de la web** (shell, tonos slate). La landing tiene la suya exclusiva. | No: propiedad del Integrador. |
+| `templates/partials/sidebar.html` | Menú lateral del shell. | No: propiedad del Integrador. |
+| `templates/partials/navbar.html` | **OBSOLETO** — ya no lo incluye `base.html`. No lo uses ni lo edites; bórralo si estorba. | No: no editar. |
 | `templates/partials/footer.html` | **Footer GLOBAL** (violeta/paper, ex-landing). Aplica a todas las páginas del shell; la landing NO lo usa. | No: propiedad del Integrador. |
 | `templates/partials/alerts.html` | Alertas genéricas del shell. | No: propiedad del Integrador. |
 | `templates/core/home.html` | Landing standalone: arma su `<head>` y navbar con includes y compone las secciones. Ejemplo canónico. | Sí (es referencia + reutilizable por copy-paste de patrones). |
@@ -48,9 +50,9 @@ Reglas de oro:
 Hay **dos patrones de página** conviviendo:
 
 - **Standalone** (landing): `home.html` NO extiende `base.html`; trae su propio `<html>` y arma el `<head>` con `core/_head.html` (Montserrat + CSS), su navbar con `core/_landing_navbar.html` (exclusivo del landing) y sus secciones. Una página de marketing o que necesite el look completo de marca usa este patrón.
-- **Shell** (funcionales): `health.html` extiende `base.html` (`{% extends "base.html" %}` + `{% block content %}`) y hereda el navbar del shell y el **footer global** (`partials/footer.html`). Las vistas de datos/forms de accounts/projects parten de acá.
+- **Shell** (funcionales): `health.html` extiende `base.html` (`{% extends "base.html" %}` + `{% block content %}`) y hereda la barra superior y el menú lateral del shell (`partials/topbar.html` + `partials/sidebar.html`) y el **footer global** (`partials/footer.html`). Las vistas de datos/forms de accounts/projects parten de acá.
 
-**Navbar / footer por contexto:** el navbar del landing es **exclusivo de la landing** (`core/_landing_navbar.html`); dentro de la web se usa `partials/navbar.html`. El **footer global** (`partials/footer.html`) aplica a todas las páginas **excepto la landing**, que tendrá un footer exclusivo propio (pendiente de diseño).
+**Navegación / footer por contexto:** el navbar del landing es **exclusivo de la landing** (`core/_landing_navbar.html`); dentro de la web se usan `partials/topbar.html` (barra superior) y `partials/sidebar.html` (menú lateral). El **footer global** (`partials/footer.html`) aplica a todas las páginas **excepto la landing**, que tendrá un footer exclusivo propio (`core/_landing_footer.html`, ya existe).
 
 ---
 
@@ -157,7 +159,7 @@ Ambos viven en `templates/core/` y **se incluyen con parámetros**; no copiar su
 
 ### 5.5 Navbar de la landing (píldora flotante) — EXCLUSIVO del landing
 
-Vive en `templates/core/_landing_navbar.html` (la landing lo incluye con `{% include %}`). **No se usa dentro de la web**: allá se usa `partials/navbar.html`. Características: `fixed inset-x-0 top-0 z-50 px-4 pt-4 …`, contenedor `max-w-[1248px]`, píldora `rounded-full bg-paper/95 shadow-navbar ring-1 ring-white/70 backdrop-blur`, logo `DEV<span v-400>MATCH<span v-700>`, enlaces `text-sm font-semibold text-violet-600 hover:text-violet-800`, CTAs a la derecha, botón hamburguesa `md:hidden`. El menú móvil es un dropdown `#mobile-menu` y su script vive en `static/js/landing-menu.js` (vanilla, alterna `.hidden` + `aria-expanded`, cierra con Esc). **No agregues librerías JS.**
+Vive en `templates/core/_landing_navbar.html` (la landing lo incluye con `{% include %}`). **No se usa dentro de la web**: allá se usa `partials/topbar.html` y `partials/sidebar.html`. Características: `fixed inset-x-0 top-0 z-50 px-4 pt-4 …`, contenedor `max-w-[1248px]`, píldora `rounded-full bg-paper/95 shadow-navbar ring-1 ring-white/70 backdrop-blur`, logo `DEV<span v-400>MATCH<span v-700>`, enlaces `text-sm font-semibold text-violet-600 hover:text-violet-800`, CTAs a la derecha, botón hamburguesa `md:hidden`. El menú móvil es un dropdown `#mobile-menu` y su script vive en `static/js/landing-menu.js` (vanilla, alterna `.hidden` + `aria-expanded`, cierra con Esc). **No agregues librerías JS.**
 
 ### 5.6 Avatares iniciales
 
