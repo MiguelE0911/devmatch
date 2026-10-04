@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError
+from django.db import DatabaseError, IntegrityError, transaction
 from django.test import TestCase
 
 from apps.projects.models import Proyecto, Vacante
@@ -79,17 +79,24 @@ class InvitacionIntegridadTests(InvitacionBase):
         self._invitar()
         self.assertEqual(m.Invitacion.objects.count(), 2)
 
-    def test_se_borra_en_cascada_si_se_borra_la_vacante(self):
+    def test_no_se_puede_borrar_fisicamente_una_vacante_con_invitaciones(self):
         self._invitar()
-        self.vacante.delete()
-        self.assertEqual(m.Invitacion.objects.count(), 0)
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic():
+                self.vacante.delete()
+        self.assertEqual(m.Invitacion.objects.count(), 1)
 
-    def test_se_borra_en_cascada_si_se_elimina_el_usuario_invitado(self):
+    def test_no_se_puede_borrar_un_usuario_invitado_con_invitaciones(self):
         self._invitar()
-        self.invitado.delete()
-        self.assertEqual(m.Invitacion.objects.count(), 0)
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic():
+                self.invitado.delete()
+        self.assertEqual(m.Invitacion.objects.count(), 1)
 
     def test_no_se_puede_borrar_quien_envio_invitaciones(self):
         self._invitar()
-        with self.assertRaises(IntegrityError):
-            self.creador.delete()
+        # DatabaseError y no IntegrityError: el trigger de usuarios aborta con
+        # SQLSTATE P0001, que Django no traduce a IntegrityError.
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic():
+                self.creador.delete()

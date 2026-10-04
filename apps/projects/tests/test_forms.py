@@ -3,6 +3,7 @@ from django.test import TestCase
 
 from apps.projects.forms import ProyectoForm
 from apps.projects.models import Proyecto
+from apps.projects.tests.helpers import lleva_a
 
 Usuario = get_user_model()
 
@@ -52,8 +53,7 @@ class ProyectoFormEstadoTests(TestCase):
         self.assertEqual(self.proyecto.estado, Proyecto.ESTADO_BORRADOR)
 
     def test_finalizar_registra_finalizado_en(self):
-        self.proyecto.estado = Proyecto.ESTADO_EN_DESARROLLO
-        self.proyecto.save()
+        lleva_a(self.proyecto, Proyecto.ESTADO_EN_DESARROLLO)
         form = ProyectoForm(
             instance=self.proyecto,
             data=self.form_datos(estado=Proyecto.ESTADO_FINALIZADO),
@@ -81,9 +81,7 @@ class ProyectoFormEstadoTests(TestCase):
         self.assertIsNone(self.proyecto.cancelado_en)
 
     def test_mismo_estado_no_escribe_timestamps(self):
-        self.proyecto.estado = Proyecto.ESTADO_EN_DESARROLLO
-        self.proyecto.save()
-        self.proyecto.refresh_from_db()
+        lleva_a(self.proyecto, Proyecto.ESTADO_EN_DESARROLLO)
         form = ProyectoForm(
             instance=self.proyecto,
             data=self.form_datos(estado=Proyecto.ESTADO_EN_DESARROLLO),

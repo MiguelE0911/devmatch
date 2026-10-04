@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError
+from django.db import DatabaseError, IntegrityError, transaction
 from django.test import TestCase
 
 from apps.applications.models import Postulacion
@@ -115,12 +115,24 @@ class EquipoMembresiaIntegridadTests(EquipoMembresiaBase):
         self._membresia_por_invitacion()
         self.assertEqual(m.EquipoMembresia.objects.count(), 2)
 
-    def test_se_borra_en_cascada_si_se_borra_el_proyecto(self):
+    def test_no_se_puede_borrar_fisicamente_un_proyecto_con_membresias(self):
         self._membresia_por_invitacion()
-        self.proyecto.delete()
-        self.assertEqual(m.EquipoMembresia.objects.count(), 0)
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic():
+                self.proyecto.delete()
+        self.assertEqual(m.EquipoMembresia.objects.count(), 1)
+
+    def test_retirar_el_proyecto_no_borra_las_membresias(self):
+        membresia = self._membresia_por_invitacion()
+        self.proyecto.es_activo = False
+        self.proyecto.save()
+        membresia.refresh_from_db()
+        self.assertEqual(m.EquipoMembresia.objects.count(), 1)
 
     def test_no_se_puede_borrar_un_miembro_con_membresia(self):
         self._membresia_por_invitacion()
-        with self.assertRaises(IntegrityError):
-            self.miembro.delete()
+        # DatabaseError y no IntegrityError: el trigger de usuarios aborta con
+        # SQLSTATE P0001, que Django no traduce a IntegrityError.
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic():
+                self.miembro.delete()

@@ -4,6 +4,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.projects.models import Proyecto, ProyectoMedia
+from apps.projects.tests.helpers import lleva_a
 
 import json
 
@@ -245,8 +246,7 @@ class ProyectoDeleteTests(TestCase):
         self.url = reverse("projects:project_delete", args=[self.proyecto.pk])
 
     def test_borrar_proyecto_en_reclutando_lo_cancela(self):
-        self.proyecto.estado = Proyecto.ESTADO_RECLUTANDO
-        self.proyecto.save()
+        lleva_a(self.proyecto, Proyecto.ESTADO_RECLUTANDO)
         self.client.force_login(self.creador)
         resp = self.client.post(self.url)
         self.assertEqual(resp.status_code, 302)
@@ -258,8 +258,7 @@ class ProyectoDeleteTests(TestCase):
         self.assertEqual(self.proyecto.desactivado_por, self.creador)
 
     def test_borrar_proyecto_finalizado_no_cambia_estado_pero_desactiva(self):
-        self.proyecto.estado = Proyecto.ESTADO_FINALIZADO
-        self.proyecto.save()
+        lleva_a(self.proyecto, Proyecto.ESTADO_FINALIZADO)
         self.client.force_login(self.creador)
         resp = self.client.post(self.url)
         self.assertEqual(resp.status_code, 302)
@@ -307,8 +306,7 @@ class ProyectoDetailVisibilidadTests(TestCase):
         self.assertEqual(resp.status_code, 404)
 
     def test_tercero_ve_estados_visibles(self):
-        self.proyecto.estado = Proyecto.ESTADO_RECLUTANDO
-        self.proyecto.save()
+        lleva_a(self.proyecto, Proyecto.ESTADO_RECLUTANDO)
         self.client.force_login(self.otro)
         resp = self.client.get(self.url)
         self.assertEqual(resp.status_code, 200)

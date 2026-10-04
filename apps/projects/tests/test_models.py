@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError
+from django.db import DatabaseError, IntegrityError, transaction
 from django.db.models import CompositePrimaryKey
 from django.test import TestCase
 
@@ -61,8 +61,11 @@ class ProyectoContractTests(TestCase):
         m.Proyecto.objects.create(
             creador=self.creador, nombre="Demo", descripcion="desc"
         )
-        with self.assertRaises(IntegrityError):
-            self.creador.delete()
+        # DatabaseError y no IntegrityError: el trigger de usuarios aborta con
+        # SQLSTATE P0001, que Django no traduce a IntegrityError.
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic():
+                self.creador.delete()
 
 
 class VacanteContractTests(TestCase):
@@ -105,12 +108,23 @@ class VacanteContractTests(TestCase):
         self.assertEqual(vacante.cupos_ocupados, 0)
         self.assertTrue(vacante.es_activo)
 
-    def test_se_borra_en_cascada_si_se_borra_el_proyecto(self):
+    def test_desactivar_un_proyecto_lo_conserva_en_la_base(self):
         m.Vacante.objects.create(
             proyecto=self.proyecto, titulo="Backend", descripcion="desc", cupos_totales=3
         )
-        self.proyecto.delete()
-        self.assertEqual(m.Vacante.objects.count(), 0)
+        # `trg_bloquear_borrado_proyectos` aborta el DELETE antes del
+        # ON DELETE CASCADE de vacantes.proyecto_id: el borrado no es una vía
+        # válida y la baja se hace con es_activo=False.
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic():
+                self.proyecto.delete()
+        self.assertEqual(m.Vacante.objects.count(), 1)
+
+        self.proyecto.es_activo = False
+        self.proyecto.save()
+        self.proyecto.refresh_from_db()
+        self.assertFalse(self.proyecto.es_activo)
+        self.assertEqual(m.Vacante.objects.count(), 1)
 
 
 class ProyectoMediaContractTests(TestCase):
@@ -157,14 +171,27 @@ class ProyectoMediaContractTests(TestCase):
         self.assertEqual(media.orden, 0)
         self.assertTrue(media.es_activo)
 
-    def test_se_borra_en_cascada_si_se_borra_el_proyecto(self):
+    def test_no_se_puede_borrar_fisicamente_un_proyecto_con_galeria(self):
         m.ProyectoMedia.objects.create(
             proyecto=self.proyecto,
             tipo=m.ProyectoMedia.TIPO_PROTOTIPO,
             archivo_url="https://example.com/prototipo.png",
         )
-        self.proyecto.delete()
-        self.assertEqual(m.ProyectoMedia.objects.count(), 0)
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic():
+                self.proyecto.delete()
+        self.assertEqual(m.ProyectoMedia.objects.count(), 1)
+
+    def test_desactivar_un_proyecto_no_borra_su_galeria(self):
+        media = m.ProyectoMedia.objects.create(
+            proyecto=self.proyecto,
+            tipo=m.ProyectoMedia.TIPO_PROTOTIPO,
+            archivo_url="https://example.com/prototipo.png",
+        )
+        self.proyecto.es_activo = False
+        self.proyecto.save()
+        media.refresh_from_db()
+        self.assertTrue(media.es_activo)
 
 
 class TablasPuenteRequisitosTests(TestCase):
@@ -228,9 +255,27 @@ class TablasPuenteRequisitosTests(TestCase):
         self.assertEqual(m.VacanteHabilidadRequerida.objects.count(), 1)
         self.assertEqual(m.VacanteTecnologiaRequerida.objects.count(), 1)
 
-    def test_se_borran_en_cascada_si_se_borra_la_vacante(self):
+    def test_no_se_puede_borrar_fisicamente_una_vacante_con_requisitos(self):
         m.VacanteHabilidadRequerida.objects.create(
             vacante=self.vacante, habilidad=self.habilidad
         )
-        self.vacante.delete()
-        self.assertEqual(m.VacanteHabilidadRequerida.objects.count(), 0)
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic():
+                self.vacante.delete()
+        self.assertEqual(m.VacanteHabilidadRequerida.objects.count(), 1)
+
+    def test_desactivar_una_vacante_no_borra_sus_requisitos(self):
+        # vacante_habilidades_requeridas es tabla puente pura: no lleva
+        # es_activo, asi que la unica via de baja es desactivar la vacante.
+        self.assertFalse(
+            hasattr(m.VacanteHabilidadRequerida, "es_activo"),
+            "la tabla puente no deberia tener es_activo",
+        )
+        m.VacanteHabilidadRequerida.objects.create(
+            vacante=self.vacante, habilidad=self.habilidad
+        )
+        self.vacante.es_activo = False
+        self.vacante.save()
+        self.vacante.refresh_from_db()
+        self.assertFalse(self.vacante.es_activo)
+        self.assertEqual(m.VacanteHabilidadRequerida.objects.count(), 1)

@@ -1,9 +1,11 @@
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError, transaction
 from django.test import TestCase
 
-from apps.projects.models import Proyecto
+from apps.projects.models import Proyecto, Vacante
+from apps.projects.tests.helpers import lleva_a
 from apps.reviews.models import Resena
+from apps.teams.models import EquipoMembresia, Invitacion
 
 Usuario = get_user_model()
 
@@ -18,6 +20,36 @@ class ResenaBase(TestCase):
         )
         self.proyecto = Proyecto.objects.create(
             creador=self.autor, nombre="Demo", descripcion="desc"
+        )
+        lleva_a(self.proyecto, Proyecto.ESTADO_RECLUTANDO)
+        self.vacante = Vacante.objects.create(
+            proyecto=self.proyecto,
+            titulo="Backend",
+            descripcion="desc",
+            cupos_totales=5,
+        )
+        self._miembro(self.destinatario)
+        lleva_a(self.proyecto, Proyecto.ESTADO_FINALIZADO)
+
+    def _miembro(self, usuario):
+        """Registra a `usuario` como miembro real del proyecto.
+
+        `trg_validar_resena` exige que autor y destinatario hayan sido
+        miembros: cuenta el creador del proyecto o cualquiera con membresía en
+        `equipos_membresias`. El check `chk_origen_membresia` exige que esa
+        membresía venga de una postulación o de una invitación aceptada.
+        """
+        invitacion = Invitacion.objects.create(
+            vacante=self.vacante,
+            usuario_invitado=usuario,
+            invitado_por=self.autor,
+            estado=Invitacion.ESTADO_ACEPTADA,
+        )
+        return EquipoMembresia.objects.create(
+            proyecto=self.proyecto,
+            vacante=self.vacante,
+            usuario=usuario,
+            invitacion=invitacion,
         )
 
     def _resena(self, **kwargs):
@@ -64,6 +96,7 @@ class ResenaIntegridadTests(ResenaBase):
             "tercero-c@devmatch.test", "tercero-c", password="Clave-123!"
         )
         self._resena(calificacion=1)
+        self._miembro(otro)
         self._resena(calificacion=5, destinatario=otro)
 
     def test_rechaza_calificacion_fuera_de_rango(self):
@@ -86,18 +119,24 @@ class ResenaIntegridadTests(ResenaBase):
             "tercero@devmatch.test", "tercero", password="Clave-123!"
         )
         self._resena()
+        self._miembro(otro)
         self._resena(destinatario=otro)
         self.assertEqual(Resena.objects.count(), 2)
 
-    def test_se_borra_en_cascada_si_se_borra_el_proyecto(self):
+    def test_no_se_puede_borrar_fisicamente_un_proyecto_con_resenas(self):
         self._resena()
-        self.proyecto.delete()
-        self.assertEqual(Resena.objects.count(), 0)
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic():
+                self.proyecto.delete()
+        self.assertEqual(Resena.objects.count(), 1)
 
     def test_no_se_puede_borrar_un_autor_con_resena(self):
         self._resena()
-        with self.assertRaises(IntegrityError):
-            self.autor.delete()
+        # DatabaseError y no IntegrityError: el trigger de usuarios aborta con
+        # SQLSTATE P0001, que Django no traduce a IntegrityError.
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic():
+                self.autor.delete()
 
     def test_desactivacion_por_moderador_no_borra_la_evidencia(self):
         moderador = Usuario.objects.create_user(

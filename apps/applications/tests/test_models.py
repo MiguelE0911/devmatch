@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError
+from django.db import DatabaseError, IntegrityError, transaction
 from django.test import TestCase
 
 from apps.applications import models as m
@@ -99,12 +99,30 @@ class PostulacionIntegridadTests(PostulacionBase):
         postulacion.refresh_from_db()
         self.assertEqual(postulacion.match_factores, {"habilidades": 90, "nivel": 80})
 
-    def test_se_borra_en_cascada_si_se_borra_la_vacante(self):
+    def test_no_se_puede_borrar_fisicamente_una_vacante_con_postulaciones(self):
+        # `trg_bloquear_borrado_vacantes` aborta el DELETE antes de que el
+        # ON DELETE CASCADE de postulaciones.vacante_id llegue a ejecutarse.
+        # Por eso la vía soportada es estado='retirada', no el borrado.
         self._postular()
-        self.vacante.delete()
-        self.assertEqual(m.Postulacion.objects.count(), 0)
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic():
+                self.vacante.delete()
+        self.assertEqual(m.Postulacion.objects.count(), 1)
+
+    def test_retirar_la_postulacion_la_conserva_en_la_base(self):
+        postulacion = self._postular()
+        postulacion.estado = m.Postulacion.ESTADO_RETIRADA
+        postulacion.save()
+        postulacion.refresh_from_db()
+        self.assertEqual(postulacion.estado, m.Postulacion.ESTADO_RETIRADA)
+        self.assertEqual(m.Postulacion.objects.count(), 1)
 
     def test_no_se_puede_borrar_un_postulante_con_postulaciones(self):
+        # DatabaseError y no IntegrityError: en la base real el trigger de
+        # usuarios aborta con SQLSTATE P0001, que Django no traduce a
+        # IntegrityError. La clase padre hace que el test sea válido tanto si
+        # el error viene del trigger como si viene del ON DELETE RESTRICT.
         self._postular()
-        with self.assertRaises(IntegrityError):
-            self.postulante.delete()
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic():
+                self.postulante.delete()

@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError, transaction
 from django.test import TestCase
 from django.utils import timezone
 
@@ -112,16 +112,39 @@ class ReporteIntegridadTests(ReporteBase):
                         usuario_reportado=usuario,
                     )
 
-    def test_reportante_opcional_y_set_null_si_se_borra(self):
+    def test_no_se_puede_borrar_al_reportante_con_un_reporte(self):
+        # reportes.reportante_id es ON DELETE SET NULL, pero
+        # trg_bloquear_borrado_usuarios aborta antes el DELETE del usuario.
         reporte = self._reporte()
-        self.reportante.delete()
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic():
+                self.reportante.delete()
+        reporte.refresh_from_db()
+        self.assertEqual(reporte.reportante, self.reportante)
+
+    def test_el_reporte_permite_reportante_nulo(self):
+        reporte = Reporte.objects.create(
+            reportante=None,
+            tipo_objetivo=Reporte.TIPO_OBJETIVO_CONDUCTA,
+            usuario_reportado=self.reportado,
+            motivo="Sin reportante asociado",
+        )
         reporte.refresh_from_db()
         self.assertIsNone(reporte.reportante)
 
-    def test_el_reporte_se_borra_en_cascada_si_se_borra_el_proyecto_reportado(self):
+    def test_no_se_puede_borrar_fisicamente_un_proyecto_con_reportes(self):
         self._reporte()
-        self.proyecto.delete()
-        self.assertEqual(Reporte.objects.count(), 0)
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic():
+                self.proyecto.delete()
+        self.assertEqual(Reporte.objects.count(), 1)
+
+    def test_resolver_reporte_no_borra_la_evidencia(self):
+        self._reporte()
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic():
+                Reporte.objects.all().delete()
+        self.assertEqual(Reporte.objects.count(), 1)
 
     def test_resolver_reporte_persiste_decision_y_responsable(self):
         moderador = Usuario.objects.create_user(

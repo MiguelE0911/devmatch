@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError
+from django.db import DatabaseError, transaction
 from django.test import TestCase
 
 from apps.audit.models import AuditoriaLog
@@ -39,14 +39,29 @@ class AuditoriaLogContractTests(TestCase):
         self.assertEqual(registro.detalle["score"], 87)
         self.assertEqual(str(registro), "postulacion_aceptada en postulaciones#42")
 
-    def test_usuario_opcional_y_set_null_si_se_borra(self):
+    def test_no_se_puede_borrar_al_usuario_autor_de_un_registro(self):
+        # auditoria_logs.usuario_id es ON DELETE SET NULL, pero
+        # trg_bloquear_borrado_usuarios aborta el DELETE del usuario antes de
+        # que ese SET NULL llegue a ejecutarse. El SET NULL queda como red de
+        # seguridad para un DBA que deshabilite el trigger a proposito.
         registro = AuditoriaLog.objects.create(
             usuario=self.usuario,
             accion="sistema",
             tabla_afectada="proyectos",
             registro_id=1,
         )
-        self.usuario.delete()
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic():
+                self.usuario.delete()
+        registro.refresh_from_db()
+        self.assertEqual(registro.usuario, self.usuario)
+
+    def test_el_registro_permite_usuario_nulo(self):
+        registro = AuditoriaLog.objects.create(
+            accion="sistema",
+            tabla_afectada="proyectos",
+            registro_id=1,
+        )
         registro.refresh_from_db()
         self.assertIsNone(registro.usuario)
 

@@ -3,6 +3,7 @@ from django.test import TestCase
 
 from apps.projects import models as m
 from apps.projects import services as s
+from apps.projects.tests.helpers import lleva_a
 
 Usuario = get_user_model()
 
@@ -28,8 +29,7 @@ class CambiarEstadoTests(TestCase):
         self.assertEqual(self.proyecto.estado, m.Proyecto.ESTADO_BORRADOR)
 
     def test_estados_terminales_no_permiten_ninguna_transicion(self):
-        self.proyecto.estado = m.Proyecto.ESTADO_FINALIZADO
-        self.proyecto.save()
+        lleva_a(self.proyecto, m.Proyecto.ESTADO_FINALIZADO)
         with self.assertRaises(s.TransicionEstadoInvalida):
             s.cambiar_estado(self.proyecto, m.Proyecto.ESTADO_CANCELADO)
 
@@ -38,8 +38,7 @@ class CambiarEstadoTests(TestCase):
         self.assertEqual(resultado.estado, m.Proyecto.ESTADO_BORRADOR)
 
     def test_finalizar_registra_finalizado_en(self):
-        self.proyecto.estado = m.Proyecto.ESTADO_EN_DESARROLLO
-        self.proyecto.save()
+        lleva_a(self.proyecto, m.Proyecto.ESTADO_EN_DESARROLLO)
         s.cambiar_estado(self.proyecto, m.Proyecto.ESTADO_FINALIZADO)
         self.proyecto.refresh_from_db()
         self.assertIsNotNone(self.proyecto.finalizado_en)

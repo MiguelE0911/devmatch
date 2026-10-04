@@ -4,6 +4,7 @@ Django>=5.2,<5.3
 psycopg2-binary>=2.9,<3.0
 python-dotenv>=1.0,<2.0
 dj-database-url>=3.1.2
+whitenoise>=6.7,<7.0
 
 # Se agregan más adelante, cuando la etapa correspondiente los necesite:
 # Pillow          -> procesamiento de logos/prototipos (proyecto_media)
