@@ -316,11 +316,3 @@ garantizado que el log de auditoría **no se pueda reescribir**, pero no que se 
 trigger `fn_inmutable_auditoria` bloquea modificaciones sobre `auditoria_logs`; eso es lo
 contrario de lo que el criterio de aceptación CR-17 / CR-20 pide, que es que existan registros.
 Sin el servicio que escribe, la trazabilidad no existe aunque la tabla esté lista.
-
-## Relación con los entregables de la sección 8
-
-La sección 8 enumera los productos que el equipo debía entregar como respuesta a esta
-solicitud: MoSCoW actualizado, matriz de impacto, dependencias, modelo de datos, criterios de
-aceptación, riesgos, plan de trabajo y demostración funcional. **Esos productos ya fueron
-elaborados y entregados**; este anexo no los sustituye ni los repite, solo deja constancia de
-qué parte del código respalda cada requerimiento.
