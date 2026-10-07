@@ -42,6 +42,7 @@ class FeedViewTests(TestCase):
     def test_feed_requiere_login(self):
         resp = self.client.get(reverse("core:feed"))
         self.assertEqual(resp.status_code, 302)
+        self.assertTrue(resp.url.startswith("/ingresar/"))
 
     def test_feed_usa_la_plantilla_correcta(self):
         self._crear_proyecto("Red Social")

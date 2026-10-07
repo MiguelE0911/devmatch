@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import HttpResponse
 from django.test import RequestFactory, TestCase
 
 from apps.core import permissions
@@ -107,15 +107,17 @@ class CreadorRequiredDecoratorTests(BasePermisosTests):
     def test_usuario_distinto_se_redirige_a_login(self):
         request = self._request_de(self.otro)
         response = self._vista_proyecto(request, pk=self.proyecto.pk)
-        self.assertIsInstance(response, HttpResponseRedirect)
         self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/ingresar/?next=/x/")
 
     def test_anonimo_se_redirige_a_login(self):
         request = self._request_de(None)
         response = self._vista_proyecto(request, pk=self.proyecto.pk)
-        self.assertIsInstance(response, HttpResponseRedirect)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/ingresar/?next=/x/")
 
     def test_objeto_inexistente_se_redirige(self):
         request = self._request_de(self.creador)
         response = self._vista_proyecto(request, pk=999999)
-        self.assertIsInstance(response, HttpResponseRedirect)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/ingresar/?next=/x/")
