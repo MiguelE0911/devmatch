@@ -17,6 +17,7 @@ def home(request):
     return render(request, "core/home.html")
 
 
+@login_not_required
 def health(request):
     """Health-check de conexión a la base de datos."""
     db_ok = True

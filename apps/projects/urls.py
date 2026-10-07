@@ -1,3 +1,4 @@
+from django.contrib.auth.decorators import login_not_required
 from django.urls import path
 
 from . import views
@@ -13,7 +14,7 @@ urlpatterns = [
     ),
     path(
         "proyectos/<int:pk>/",
-        views.ProyectoDetailView.as_view(),
+        login_not_required(views.ProyectoDetailView.as_view()),
         name="project_detail",
     ),
     path(
