@@ -61,6 +61,11 @@ MIDDLEWARE = [
     # de AuthenticationMiddleware. El admin ya marca su login como exento.
     "django.contrib.auth.middleware.LoginRequiredMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    # Protección de cuentas: cierra la sesión de usuarios bloqueados o
+    # desactivados (is_active=False) y los manda al login con mensaje.
+    # Va después de AuthenticationMiddleware (necesita request.user) y de
+    # MessageMiddleware (necesita encolar el mensaje). Feedback Etapa 1.
+    "apps.core.middleware.AccountStateMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
