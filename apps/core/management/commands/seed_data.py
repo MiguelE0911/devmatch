@@ -24,6 +24,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.NOTICE("== DevMatch: seed_data =="))
         self.seed_usuarios()
         self.seed_proyectos()
+        self.seed_interacciones()
         self.stdout.write(self.style.SUCCESS("Datos de prueba generados correctamente."))
 
     @staticmethod
@@ -168,9 +169,10 @@ class Command(BaseCommand):
                 usuario.first_name = datos["first_name"]
                 usuario.last_name = datos["last_name"]
                 usuario.es_admin = datos["es_admin"]
+                usuario.es_activo = True
                 usuario.set_password(DEMO_PASSWORD)
                 usuario.save(
-                    update_fields=["username", "first_name", "last_name", "es_admin", "password"]
+                    update_fields=["username", "first_name", "last_name", "es_admin", "es_activo", "password"]
                 )
 
             perfil_data = datos["perfil"]
@@ -368,9 +370,12 @@ class Command(BaseCommand):
             )
             if not creado:
                 proyecto.descripcion = datos["descripcion"]
-                proyecto.estado = datos["estado"]
                 proyecto.es_activo = True
-                proyecto.save()
+                # No forzar transición si está en estado terminal (respeta triggers)
+                terminales = {Proyecto.ESTADO_FINALIZADO, Proyecto.ESTADO_CANCELADO}
+                if proyecto.estado not in terminales:
+                    proyecto.estado = datos["estado"]
+                proyecto.save(update_fields=["descripcion", "estado", "es_activo"])
 
             for media in datos["media"]:
                 ProyectoMedia.objects.get_or_create(
@@ -392,7 +397,8 @@ class Command(BaseCommand):
                 if not _creada:
                     vac.estado = vacante["estado"]
                     vac.cupos_totales = vacante["cupos_totales"]
-                    vac.save()
+                    vac.es_activo = True
+                    vac.save(update_fields=["estado", "cupos_totales", "es_activo"])
                 for nombre in vacante["habilidades"]:
                     habilidad = self._catalogo(Habilidad, nombre)
                     VacanteHabilidad.objects.get_or_create(vacante=vac, habilidad=habilidad)
@@ -401,3 +407,95 @@ class Command(BaseCommand):
                     VacanteTecnologia.objects.get_or_create(vacante=vac, tecnologia=tecnologia)
 
         self.stdout.write(self.style.SUCCESS(f"  proyectos y vacantes: {len(proyectos)}"))
+
+    # ------------------------------------------------------------------
+    # POSTULACIONES, INVITACIONES Y MEMBRESÍAS
+    # ------------------------------------------------------------------
+
+    def seed_interacciones(self):
+        Usuario = self._model("accounts", "Usuario")
+        Proyecto = self._model("projects", "Proyecto")
+        Vacante = self._model("projects", "Vacante")
+        Postulacion = self._model("applications", "Postulacion")
+        Invitacion = self._model("teams", "Invitacion")
+        EquipoMembresia = self._model("teams", "EquipoMembresia")
+        ConfiguracionPesosMatching = self._model("matching", "ConfiguracionPesosMatching")
+
+        pesos = ConfiguracionPesosMatching.objects.filter(es_activo=True).first()
+        if pesos is None:
+            pesos = ConfiguracionPesosMatching.objects.create(
+                nombre="Default seed",
+                peso_habilidades=0.25,
+                peso_nivel=0.15,
+                peso_tecnologias=0.20,
+                peso_experiencia=0.15,
+                peso_disponibilidad=0.25,
+                es_activo=True,
+            )
+
+        usuarios = list(Usuario.objects.all().order_by("id"))
+        if len(usuarios) < 3:
+            return
+
+        vacantes = list(Vacante.objects.select_related("proyecto").all())
+        creadas = 0
+        for idx, vac in enumerate(vacantes):
+            for i, u in enumerate(usuarios):
+                if u == vac.proyecto.creador:
+                    continue
+                if (i + idx) % len(usuarios) == 0 or (i % 3) == 0:
+                    try:
+                        Postulacion.objects.get_or_create(
+                            vacante=vac,
+                            postulante=u,
+                            defaults={
+                                "estado": Postulacion.ESTADO_PENDIENTE,
+                                "match_score": 70.00,
+                                "match_factores": {"notas": "seed"},
+                                "pesos_usados": pesos,
+                            },
+                        )
+                        creadas += 1
+                    except Exception:
+                        continue
+
+        # Crear una membresía activa si hay vacantes con cupos? No forzamos cupos_ocupados; trigger lo maneja.
+        # Solo para vacantes que tienen al menos una postulación aceptada? o crear vía invitación/aceptación
+        # Evitar violar restricciones: crear membresías solo si existe origen válido.
+        memb = 0
+        try:
+            v1 = vacantes[0] if vacantes else None
+            if v1 and usuarios:
+                u = usuarios[-1]
+                if u != v1.proyecto.creador:
+                    # intentar crear invitación aceptada + membresía
+                    inv, _ = Invitacion.objects.get_or_create(
+                        vacante=v1,
+                        usuario_invitado=u,
+                        defaults={
+                            "invitado_por": v1.proyecto.creador,
+                            "estado": Invitacion.ESTADO_ACEPTADA,
+                        },
+                    )
+                    if inv.estado != Invitacion.ESTADO_ACEPTADA:
+                        inv.estado = Invitacion.ESTADO_ACEPTADA
+                        inv.save(update_fields=["estado"])
+                    EquipoMembresia.objects.get_or_create(
+                        proyecto=v1.proyecto,
+                        vacante=v1,
+                        usuario=u,
+                        defaults={
+                            "invitacion": inv,
+                            "postulacion": None,
+                            "estado": EquipoMembresia.ESTADO_ACTIVO,
+                        },
+                    )
+                    memb += 1
+        except Exception:
+            pass
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"  interacciones: {creadas} postulaciones, {memb} membresías/invitaciones"
+            )
+        )
