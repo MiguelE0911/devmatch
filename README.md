@@ -32,21 +32,21 @@ Your branch is up to date with 'origin/main'.
 Una vez clonado el repositorio, cambia a la rama de integración correspondiente a la etapa actual:
 
 ```bash
-git checkout etapa-1-base
+git checkout etapa-2-base
 ```
 
 Actualiza la rama con los últimos cambios:
 
 ```bash
-git pull origin etapa-1-base
+git pull origin etapa-2-base
 ```
 
 A partir de este punto, puedes continuar con la configuración del entorno de desarrollo indicada en las siguientes secciones.
 
-> **Importante:** no trabajes directamente sobre `etapa-1-base`. Cuando vayas a comenzar una tarea, crea tu propia rama siguiendo la convención establecida:
+> **Importante:** no trabajes directamente sobre `etapa-2-base`. Cuando vayas a comenzar una tarea, crea tu propia rama siguiendo la convención establecida:
 >
 > ```bash
-> git checkout -b etapa-1/<app>-<tarea>
+> git checkout -b etapa-2/<app>-<tarea>
 > ```
 
 ---
@@ -66,6 +66,7 @@ pip install "Django>=5.2,<5.3"
 pip install "dj-database-url>=3.1.2"
 pip install "python-dotenv>=1.0,<2.0"
 pip install "psycopg2-binary>=2.9,<3.0"
+pip install "whitenoise>=6.7,<7.0"
 ```
 
 ---
@@ -157,20 +158,20 @@ Si las variables de entorno están configuradas correctamente y la conexión con
 Posiciónate en la rama de integración actual y actualízala:
 
 ```bash
-git checkout etapa-1-base
-git pull origin etapa-1-base
+git checkout etapa-2-base
+git pull origin etapa-2-base
 ```
 
 Crea tu rama de tarea siguiendo estrictamente la convención:
 
 ```bash
-git checkout -b etapa-1/<app>-<tarea>
+git checkout -b etapa-2/<app>-<tarea>
 ```
 
 Por ejemplo:
 
 ```bash
-git checkout -b etapa-1/accounts-modelos
+git checkout -b etapa-2/accounts-modelos
 ```
 
 ### Durante el desarrollo
@@ -186,13 +187,13 @@ Cuando termines tu tarea:
 ```bash
 git add .
 git commit -m "Descripción de los cambios"
-git push origin etapa-1/<app>-<tarea>
+git push origin etapa-2/<app>-<tarea>
 ```
 
 Después, abre un **Pull Request (PR)** hacia:
 
 ```text
-etapa-1-base
+etapa-2-base
 ```
 
 > La rama `main` está protegida y no se deben realizar pushes directos sobre ella.
