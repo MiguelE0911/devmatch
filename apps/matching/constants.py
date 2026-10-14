@@ -20,6 +20,7 @@ PESOS_DEFAULT = {
 }
 
 # --- Escalas para nivel / experiencia / disponibilidad ---------------------
+# Fórmula y casos de prueba documentados en docs/DEVMATCH-MATCHING.md.
 # SUPUESTO (ver nota al equipo): Vacante no tiene columna de nivel mínimo,
 # experiencia mínima ni disponibilidad requerida -- a diferencia de
 # habilidades/tecnologías, que sí comparan contra un requisito real vía

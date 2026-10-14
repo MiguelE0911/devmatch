@@ -78,6 +78,10 @@ def crear_postulacion(usuario, vacante):
     """
     Devuelve la Postulacion creada.
 
+    NO valida que la vacante esté abierta ni que el proyecto sea visible
+    (no esté en borrador): esa regla corresponde a las vistas, según
+    DEVMATCH-BD.md §7 y §9. Ver docs/DEVMATCH-MATCHING.md, sección 6.
+
     Levanta:
     - PostulacionDuplicadaError si el usuario ya tiene una postulación
       activa a esta vacante -- capturarla en la vista y mostrar el mensaje

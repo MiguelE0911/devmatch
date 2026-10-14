@@ -95,3 +95,45 @@ class CalcularMatchScoreTests(SimpleTestCase):
             self.assertIn(clave, factores)
             self.assertIn("score", factores[clave])
             self.assertIn("peso", factores[clave])
+
+
+class CasosDocumentadosTests(SimpleTestCase):
+    """
+    Casos A-E de docs/DEVMATCH-MATCHING.md (sección 5), con la ponderación
+    estándar v1.0. Si cambia la fórmula, hay que actualizar el documento y
+    estos valores a la vez.
+    """
+
+    def _score(self, perfil, vacante):
+        score, _ = calcular_match_score(perfil, vacante, PESOS)
+        return score
+
+    def test_caso_a_perfil_ideal(self):
+        perfil = PerfilMatching({1, 2}, {10}, "avanzado", 5, 40)
+        vacante = VacanteMatching({1, 2}, {10})
+        self.assertAlmostEqual(self._score(perfil, vacante), 100.0, places=2)
+
+    def test_caso_b_parcial(self):
+        perfil = PerfilMatching({1}, {10}, "intermedio", 3, 20)
+        vacante = VacanteMatching({1, 2}, {10, 11})
+        score, factores = calcular_match_score(perfil, vacante, PESOS)
+        self.assertAlmostEqual(score, 53.5, places=2)
+        self.assertEqual(factores["habilidades"]["score"], 50.0)
+        self.assertEqual(factores["tecnologias"]["score"], 50.0)
+        self.assertEqual(factores["experiencia"]["score"], 60.0)
+        self.assertEqual(factores["disponibilidad"]["score"], 50.0)
+
+    def test_caso_c_sin_coincidencias_no_es_cero(self):
+        perfil = PerfilMatching(set(), set(), "principiante", 0, 0)
+        vacante = VacanteMatching({1}, {10})
+        self.assertAlmostEqual(self._score(perfil, vacante), 5.0, places=2)
+
+    def test_caso_d_vacante_sin_requisitos(self):
+        perfil = PerfilMatching(set(), set(), "principiante", 0, 10)
+        vacante = VacanteMatching()
+        self.assertAlmostEqual(self._score(perfil, vacante), 72.5, places=2)
+
+    def test_caso_e_topes_superados(self):
+        perfil = PerfilMatching({1}, {10}, "avanzado", 12, 60)
+        vacante = VacanteMatching({1}, {10})
+        self.assertAlmostEqual(self._score(perfil, vacante), 100.0, places=2)
