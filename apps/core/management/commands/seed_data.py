@@ -1,5 +1,9 @@
+from decimal import Decimal
+
 from django.apps import apps as django_apps
 from django.core.management.base import BaseCommand
+from django.db import transaction
+from django.utils import timezone
 
 # Contraseña de demo para TODOS los usuarios generados. Es para que Squad B
 # pueda loguearse en el frontend de prueba; no es un secreto de producción.
@@ -409,8 +413,117 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"  proyectos y vacantes: {len(proyectos)}"))
 
     # ------------------------------------------------------------------
-    # POSTULACIONES, INVITACIONES Y MEMBRESÍAS
+    # POSTULACIONES, INVITACIONES Y MEMBRESÍAS (escenarios de Match Score)
     # ------------------------------------------------------------------
+    # Datos deterministas (no aleatorios) para que Squad B pueda maquetar el
+    # desglose del Match Score (CR-05) y el snapshot congelado (CR-07) sin
+    # esperar al motor real de Squad A. Cada escenario declara el puntaje por
+    # factor; `match_score` se calcula con los pesos vigentes para que el
+    # porcentaje y su desglose nunca queden incoherentes entre sí.
+
+    def _pesos_activos(self):
+        """Devuelve el perfil de pesos vigente (singleton) o lo crea."""
+        Configuracion = self._model("matching", "ConfiguracionPesosMatching")
+        pesos = Configuracion.objects.filter(es_activo=True).first()
+        if pesos is None:
+            pesos = Configuracion.objects.create(
+                nombre="Default seed",
+                peso_habilidades=Decimal("0.25"),
+                peso_nivel=Decimal("0.15"),
+                peso_tecnologias=Decimal("0.20"),
+                peso_experiencia=Decimal("0.15"),
+                peso_disponibilidad=Decimal("0.25"),
+                es_activo=True,
+            )
+        return pesos
+
+    @staticmethod
+    def _score_y_factores(pesos, factores):
+        """
+        Construye el `match_factores` (JSONB) en la forma documentada en
+        DEVMATCH-BD 9 y calcula el `match_score` ponderado con esos mismos
+        pesos (suma exacta, sin recálculos posteriores).
+        """
+        desglose = {}
+        score = Decimal("0")
+        for nombre in (
+            "habilidades",
+            "nivel",
+            "tecnologias",
+            "experiencia",
+            "disponibilidad",
+        ):
+            peso = getattr(pesos, f"peso_{nombre}")
+            puntaje = int(factores.get(nombre, 0))
+            desglose[nombre] = {"score": puntaje, "peso": float(peso)}
+            score += Decimal(puntaje) * peso
+        return score.quantize(Decimal("0.01")), desglose
+
+    @staticmethod
+    def _buscar_vacante(Proyecto, Vacante, nombre_proyecto, titulo_vacante):
+        proyecto = Proyecto.objects.filter(nombre=nombre_proyecto).first()
+        if proyecto is None:
+            return None, None
+        vacante = Vacante.objects.filter(
+            proyecto=proyecto, titulo=titulo_vacante
+        ).first()
+        return proyecto, vacante
+
+    @staticmethod
+    def _upsert_postulacion(Postulacion, vacante, usuario, defaults):
+        """
+        Garantiza que la postulación de este escenario tenga EXACTAMENTE los
+        valores declarados (score/factores/estado), aunque ya exista una fila de
+        una siembra anterior en la BD compartida. Prefiere reutilizar la fila
+        activa (pendiente/preseleccionada) para no dejar dos activas por par.
+        """
+        qs = Postulacion.objects.filter(vacante=vacante, postulante=usuario)
+        activas = (Postulacion.ESTADO_PENDIENTE, Postulacion.ESTADO_PRESELECCIONADA)
+        post = (
+            qs.filter(estado__in=activas).order_by("-id").first()
+            or qs.order_by("-id").first()
+        )
+        if post is None:
+            return Postulacion.objects.create(
+                vacante=vacante, postulante=usuario, **defaults
+            )
+        for campo, valor in defaults.items():
+            setattr(post, campo, valor)
+        post.save(update_fields=list(defaults.keys()))
+        return post
+
+    def _normalizar_seed_legado(self, Postulacion, pesos):
+        """
+        Las siembras anteriores dejaban postulaciones con
+        `match_factores={"notas": "seed"}` (sin desglose por factor), lo que
+        deja en blanco la barra y el desglose del Match Score en la UI. Se les
+        reemplaza por un desglose válido que reproduce su `match_score`. Solo
+        toca filas marcadas como seed (nunca datos reales) y es idempotente:
+        tras normalizar, la marca desaparece.
+        """
+        nombres = (
+            "habilidades",
+            "nivel",
+            "tecnologias",
+            "experiencia",
+            "disponibilidad",
+        )
+        actualizadas = 0
+        for post in Postulacion.objects.filter(match_factores={"notas": "seed"}):
+            base = post.match_score
+            if base != base.to_integral_value():
+                continue
+            _, factores = self._score_y_factores(
+                pesos, {nombre: int(base) for nombre in nombres}
+            )
+            post.match_factores = factores
+            if post.pesos_usados_id is None:
+                post.pesos_usados = pesos
+                post.save(update_fields=["match_factores", "pesos_usados"])
+            else:
+                post.save(update_fields=["match_factores"])
+            actualizadas += 1
+        return actualizadas
 
     def seed_interacciones(self):
         Usuario = self._model("accounts", "Usuario")
@@ -419,83 +532,193 @@ class Command(BaseCommand):
         Postulacion = self._model("applications", "Postulacion")
         Invitacion = self._model("teams", "Invitacion")
         EquipoMembresia = self._model("teams", "EquipoMembresia")
-        ConfiguracionPesosMatching = self._model("matching", "ConfiguracionPesosMatching")
 
-        pesos = ConfiguracionPesosMatching.objects.filter(es_activo=True).first()
-        if pesos is None:
-            pesos = ConfiguracionPesosMatching.objects.create(
-                nombre="Default seed",
-                peso_habilidades=0.25,
-                peso_nivel=0.15,
-                peso_tecnologias=0.20,
-                peso_experiencia=0.15,
-                peso_disponibilidad=0.25,
-                es_activo=True,
-            )
+        pesos = self._pesos_activos()
 
-        usuarios = list(Usuario.objects.all().order_by("id"))
-        if len(usuarios) < 3:
-            return
+        # Escenarios de postulación: ALTO (calza con los requisitos), MEDIO
+        # (calce parcial) y BAJO (poca compatibilidad). Cubren el rango que la
+        # vista de Match Score debe saber pintar (barra + desglose por factor).
+        escenarios = [
+            {
+                "postulante": "juan@devmatch.local",
+                "proyecto": "BrainTwist — Quizzes educativos",
+                "vacante": "Frontend Developer",
+                "estado": Postulacion.ESTADO_PENDIENTE,
+                "factores": {"habilidades": 95, "nivel": 80, "tecnologias": 100, "experiencia": 70, "disponibilidad": 100},
+            },
+            {
+                "postulante": "ana@devmatch.local",
+                "proyecto": "ClinVis — Dashboards clínicos",
+                "vacante": "Data Scientist",
+                "estado": Postulacion.ESTADO_PENDIENTE,
+                "factores": {"habilidades": 90, "nivel": 80, "tecnologias": 100, "experiencia": 70, "disponibilidad": 80},
+            },
+            {
+                "postulante": "carlos@devmatch.local",
+                "proyecto": "BrainTwist — Quizzes educativos",
+                "vacante": "Frontend Developer",
+                "estado": Postulacion.ESTADO_PRESELECCIONADA,
+                "factores": {"habilidades": 70, "nivel": 40, "tecnologias": 80, "experiencia": 30, "disponibilidad": 70},
+            },
+            {
+                "postulante": "ana@devmatch.local",
+                "proyecto": "ClinVis — Dashboards clínicos",
+                "vacante": "Backend Developer",
+                "estado": Postulacion.ESTADO_PENDIENTE,
+                "factores": {"habilidades": 55, "nivel": 80, "tecnologias": 85, "experiencia": 60, "disponibilidad": 80},
+            },
+            {
+                "postulante": "carlos@devmatch.local",
+                "proyecto": "ClinVis — Dashboards clínicos",
+                "vacante": "Backend Developer",
+                "estado": Postulacion.ESTADO_RECHAZADA,
+                "factores": {"habilidades": 25, "nivel": 40, "tecnologias": 30, "experiencia": 20, "disponibilidad": 70},
+                "motivo": "Perfil sin experiencia en backend.",
+            },
+            {
+                "postulante": "admin@devmatch.local",
+                "proyecto": "ResuMate — Optimizador de CV",
+                "vacante": "Backend Developer",
+                "estado": Postulacion.ESTADO_PENDIENTE,
+                "factores": {"habilidades": 25, "nivel": 100, "tecnologias": 40, "experiencia": 100, "disponibilidad": 100},
+            },
+            {
+                "postulante": "carlos@devmatch.local",
+                "proyecto": "ResuMate — Optimizador de CV",
+                "vacante": "Backend Developer",
+                "estado": Postulacion.ESTADO_PENDIENTE,
+                "factores": {"habilidades": 10, "nivel": 40, "tecnologias": 20, "experiencia": 15, "disponibilidad": 60},
+            },
+        ]
 
-        vacantes = list(Vacante.objects.select_related("proyecto").all())
         creadas = 0
-        for idx, vac in enumerate(vacantes):
-            for i, u in enumerate(usuarios):
-                if u == vac.proyecto.creador:
-                    continue
-                if (i + idx) % len(usuarios) == 0 or (i % 3) == 0:
-                    try:
-                        Postulacion.objects.get_or_create(
-                            vacante=vac,
-                            postulante=u,
-                            defaults={
-                                "estado": Postulacion.ESTADO_PENDIENTE,
-                                "match_score": 70.00,
-                                "match_factores": {"notas": "seed"},
-                                "pesos_usados": pesos,
-                            },
-                        )
-                        creadas += 1
-                    except Exception:
-                        continue
+        for esc in escenarios:
+            usuario = Usuario.objects.filter(email=esc["postulante"]).first()
+            proyecto, vacante = self._buscar_vacante(
+                Proyecto, Vacante, esc["proyecto"], esc["vacante"]
+            )
+            if usuario is None or vacante is None:
+                continue
+            if proyecto.creador_id == usuario.id:
+                continue
+            score, factores = self._score_y_factores(pesos, esc["factores"])
+            defaults = {
+                "estado": esc["estado"],
+                "match_score": score,
+                "match_factores": factores,
+                "pesos_usados": pesos,
+                "decidido_por": None,
+                "decidido_en": None,
+                "motivo_decision": esc.get("motivo", ""),
+            }
+            if esc["estado"] in (
+                Postulacion.ESTADO_ACEPTADA,
+                Postulacion.ESTADO_RECHAZADA,
+            ):
+                defaults["decidido_por"] = proyecto.creador
+                defaults["decidido_en"] = timezone.now()
+            self._upsert_postulacion(Postulacion, vacante, usuario, defaults)
+            creadas += 1
 
-        # Crear una membresía activa si hay vacantes con cupos? No forzamos cupos_ocupados; trigger lo maneja.
-        # Solo para vacantes que tienen al menos una postulación aceptada? o crear vía invitación/aceptación
-        # Evitar violar restricciones: crear membresías solo si existe origen válido.
-        memb = 0
-        try:
-            v1 = vacantes[0] if vacantes else None
-            if v1 and usuarios:
-                u = usuarios[-1]
-                if u != v1.proyecto.creador:
-                    # intentar crear invitación aceptada + membresía
-                    inv, _ = Invitacion.objects.get_or_create(
-                        vacante=v1,
-                        usuario_invitado=u,
-                        defaults={
-                            "invitado_por": v1.proyecto.creador,
-                            "estado": Invitacion.ESTADO_ACEPTADA,
+        # Membresías por postulación aceptada. La aceptación y el INSERT de la
+        # membresía van en una sola transacción (DEVMATCH-BD 8.3). El trigger
+        # trg_membresia_actualiza_cupos recalcula cupos_ocupados: NUNCA lo
+        # escribimos a mano. `carlos` queda con 2 membresías activas y pocas
+        # horas de disponibilidad -> escenario de choque de disponibilidad;
+        # ResuMate queda con 1/2 cupos (casi llena) -> límite de cupos.
+        aceptadas = [
+            ("ana@devmatch.local", "ResuMate — Optimizador de CV", "Backend Developer"),
+            ("carlos@devmatch.local", "BrainTwist — Quizzes educativos", "QA / Testing"),
+            ("carlos@devmatch.local", "GymLog — Entrenamientos colaborativos", "Frontend Developer"),
+        ]
+        membresias = 0
+        for email, nombre_proyecto, titulo_vacante in aceptadas:
+            usuario = Usuario.objects.filter(email=email).first()
+            proyecto, vacante = self._buscar_vacante(
+                Proyecto, Vacante, nombre_proyecto, titulo_vacante
+            )
+            if usuario is None or vacante is None or proyecto.creador_id == usuario.id:
+                continue
+            score, factores = self._score_y_factores(
+                pesos,
+                {"habilidades": 80, "nivel": 70, "tecnologias": 80, "experiencia": 60, "disponibilidad": 80},
+            )
+            try:
+                with transaction.atomic():
+                    postulacion = self._upsert_postulacion(
+                        Postulacion,
+                        vacante,
+                        usuario,
+                        {
+                            "estado": Postulacion.ESTADO_ACEPTADA,
+                            "match_score": score,
+                            "match_factores": factores,
+                            "pesos_usados": pesos,
+                            "decidido_por": proyecto.creador,
+                            "decidido_en": timezone.now(),
+                            "motivo_decision": "",
                         },
                     )
-                    if inv.estado != Invitacion.ESTADO_ACEPTADA:
-                        inv.estado = Invitacion.ESTADO_ACEPTADA
-                        inv.save(update_fields=["estado"])
                     EquipoMembresia.objects.get_or_create(
-                        proyecto=v1.proyecto,
-                        vacante=v1,
-                        usuario=u,
+                        vacante=vacante,
+                        usuario=usuario,
                         defaults={
-                            "invitacion": inv,
-                            "postulacion": None,
+                            "proyecto": proyecto,
+                            "postulacion": postulacion,
+                            "invitacion": None,
                             "estado": EquipoMembresia.ESTADO_ACTIVO,
                         },
                     )
-                    memb += 1
-        except Exception:
-            pass
+                    membresias += 1
+            except Exception:
+                continue
+
+        # Membresía por invitación aceptada (origen XOR: invitación, no
+        # postulación) para que Squad B pueda probar ambos caminos de ingreso.
+        invitaciones = [
+            ("admin@devmatch.local", "PetMatch — Adopción responsable", "Fullstack Developer"),
+        ]
+        for email, nombre_proyecto, titulo_vacante in invitaciones:
+            usuario = Usuario.objects.filter(email=email).first()
+            proyecto, vacante = self._buscar_vacante(
+                Proyecto, Vacante, nombre_proyecto, titulo_vacante
+            )
+            if usuario is None or vacante is None or proyecto.creador_id == usuario.id:
+                continue
+            try:
+                with transaction.atomic():
+                    invitacion, _ = Invitacion.objects.get_or_create(
+                        vacante=vacante,
+                        usuario_invitado=usuario,
+                        defaults={
+                            "invitado_por": proyecto.creador,
+                            "estado": Invitacion.ESTADO_ACEPTADA,
+                            "respondido_en": timezone.now(),
+                        },
+                    )
+                    if invitacion.estado != Invitacion.ESTADO_ACEPTADA:
+                        invitacion.estado = Invitacion.ESTADO_ACEPTADA
+                        invitacion.respondido_en = timezone.now()
+                        invitacion.save(update_fields=["estado", "respondido_en"])
+                    EquipoMembresia.objects.get_or_create(
+                        vacante=vacante,
+                        usuario=usuario,
+                        defaults={
+                            "proyecto": proyecto,
+                            "postulacion": None,
+                            "invitacion": invitacion,
+                            "estado": EquipoMembresia.ESTADO_ACTIVO,
+                        },
+                    )
+                    membresias += 1
+            except Exception:
+                continue
+
+        normalizadas = self._normalizar_seed_legado(Postulacion, pesos)
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"  interacciones: {creadas} postulaciones, {memb} membresías/invitaciones"
+                f"  interacciones: {creadas} postulaciones, {membresias} membresías "
+                f"(1 vía invitación), {normalizadas} filas seed antiguas normalizadas"
             )
         )
