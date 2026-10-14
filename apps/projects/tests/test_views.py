@@ -32,6 +32,7 @@ class GaleriaViewsTests(TestCase):
             reverse("projects:project_gallery_edit", args=[self.proyecto.pk])
         )
         self.assertEqual(resp.status_code, 302)
+        self.assertTrue(resp.url.startswith("/ingresar/"))
 
     def test_galeria_solo_el_dueno_accede(self):
         self.client.force_login(self.otro)
