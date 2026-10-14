@@ -94,12 +94,20 @@ def aceptar_postulacion(postulacion: Postulacion, decidido_por, motivo: str = ""
     from apps.teams.models import EquipoMembresia
 
     with transaction.atomic():
+        # select_for_update(), en este orden (postulación → vacante →
+        # perfil, ver verificar_carga), para que una segunda aceptación
+        # concurrente de la MISMA vacante espere aquí en vez de leer un
+        # conteo de cupos ya desactualizado: al despertar relee el estado
+        # ya committeado por la primera y sale con un VacanteSinCupo
+        # limpio, no con el IntegrityError crudo de chk_cupos_no_exceden.
+        postulacion = Postulacion.objects.select_for_update().get(pk=postulacion.pk)
+
         if postulacion.estado not in ESTADOS_ACEPTABLES:
             raise PostulacionNoAceptable(
                 f"La postulación está en estado '{postulacion.estado}', no se puede aceptar."
             )
 
-        vacante = postulacion.vacante
+        vacante = Vacante.objects.select_for_update().get(pk=postulacion.vacante_id)
         if not vacante.es_activo or vacante.estado != Vacante.ESTADO_ABIERTA:
             raise VacanteSinCupo(
                 f"La vacante no está disponible (estado='{vacante.estado}', "
