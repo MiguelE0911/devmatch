@@ -10,6 +10,9 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views import View
 from django.views.generic import CreateView, DetailView, UpdateView
+from apps.matching.engine import calcular_match_score
+from apps.matching.models import ConfiguracionPesosMatching
+from apps.applications.services import _construir_perfil_matching, _construir_vacante_matching
 
 from .forms import ProyectoForm, ProyectoMediaForm, VacanteForm
 from .models import Proyecto, ProyectoMedia, Vacante
@@ -87,6 +90,21 @@ def datos_laterales(proyecto, usuario):
     habilidades, tecnologias = [], []
     cupos_ocupados_total = cupos_totales_total = 0
 
+    # Preparamos el perfil y los pesos una sola vez si el usuario puede ver el Match Score
+    perfil_matching = None
+    pesos = None
+    if usuario.is_authenticated and not es_dueno:
+        pesos_activos = ConfiguracionPesosMatching.objects.filter(es_activo=True).first()
+        if pesos_activos:
+            pesos = {
+                "habilidades": float(pesos_activos.peso_habilidades),
+                "nivel": float(pesos_activos.peso_nivel),
+                "tecnologias": float(pesos_activos.peso_tecnologias),
+                "experiencia": float(pesos_activos.peso_experiencia),
+                "disponibilidad": float(pesos_activos.peso_disponibilidad),
+            }
+            perfil_matching = _construir_perfil_matching(usuario)
+
     for vacante in vacantes:
         vacante.habilidades = [
             r.habilidad
@@ -114,6 +132,15 @@ def datos_laterales(proyecto, usuario):
         vacante.puede_postularse = (
             usuario.is_authenticated and not es_dueno and vacante.cupos_libres > 0
         )
+
+        # Calculamos y anexamos el Match Score dinámicamente a la vacante
+        vacante.score_total = None
+        vacante.factores = None
+        if perfil_matching and pesos:
+            vacante_matching = _construir_vacante_matching(vacante)
+            score_total, factores = calcular_match_score(perfil_matching, vacante_matching, pesos)
+            vacante.score_total = score_total
+            vacante.factores = factores
 
         for habilidad in vacante.habilidades:
             if habilidad not in habilidades:
@@ -144,7 +171,6 @@ def datos_laterales(proyecto, usuario):
         "logo": logo,
         "prototipos": prototipos,
     }
-
 
 class ProyectoDetailView(DetailView):
     """Detalle de un proyecto con 3 tabs (?tab=vacantes|descripcion|galeria)."""
