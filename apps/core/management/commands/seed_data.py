@@ -427,12 +427,12 @@ class Command(BaseCommand):
         pesos = Configuracion.objects.filter(es_activo=True).first()
         if pesos is None:
             pesos = Configuracion.objects.create(
-                nombre="Default seed",
-                peso_habilidades=Decimal("0.25"),
+                nombre="Ponderación estándar v1.0",
+                peso_habilidades=Decimal("0.35"),
                 peso_nivel=Decimal("0.15"),
-                peso_tecnologias=Decimal("0.20"),
-                peso_experiencia=Decimal("0.15"),
-                peso_disponibilidad=Decimal("0.25"),
+                peso_tecnologias=Decimal("0.30"),
+                peso_experiencia=Decimal("0.10"),
+                peso_disponibilidad=Decimal("0.10"),
                 es_activo=True,
             )
         return pesos
