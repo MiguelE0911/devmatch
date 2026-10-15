@@ -72,7 +72,7 @@ def verificar_carga(usuario, horas_nuevas: int) -> int:
     horas nuevas) si pasa."""
     from apps.accounts.models import Perfil
 
-    perfil = Perfil.objects.select_for_update().get(usuario=usuario)
+    perfil, _ = Perfil.objects.select_for_update().get_or_create(usuario=usuario)
     carga_actual = calcular_carga(usuario)
     if carga_actual + horas_nuevas > perfil.disponibilidad_horas_semana:
         raise CargaIncompatible(
@@ -138,9 +138,11 @@ def aceptar_postulacion(postulacion: Postulacion, decidido_por, motivo: str = ""
         postulacion.motivo_decision = motivo
         postulacion.save()
 
-        return EquipoMembresia.objects.create(
+        membresia = EquipoMembresia.objects.create(
             proyecto=vacante.proyecto,
             vacante=vacante,
             usuario=postulacion.postulante,
             postulacion=postulacion,
         )
+        # TODO(CR-14, Etapa 3): audit/services.py: log_action("postulacion.aceptada", ...)
+        return membresia

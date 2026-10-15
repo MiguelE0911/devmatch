@@ -241,3 +241,24 @@ class CargaDisponibilidadTests(AceptarPostulacionBase):
                 nueva = self._postular(postulante=postulante)
                 membresia = s.aceptar_postulacion(nueva, decidido_por=self.creador)
                 self.assertIsInstance(membresia, EquipoMembresia)
+
+
+class PerfilFaltanteTests(AceptarPostulacionBase):
+    def test_verificar_carga_no_revienta_si_el_usuario_no_tiene_perfil(self):
+        # Postulante deliberadamente sin Perfil.objects.create() — a
+        # diferencia de self.postulante del setUp.
+        sin_perfil = Usuario.objects.create_user(
+            "sin-perfil@devmatch.test", "sin-perfil", password="Clave-123!"
+        )
+        self.assertFalse(Perfil.objects.filter(usuario=sin_perfil).exists())
+
+        postulacion = self._postular(
+            postulante=sin_perfil, match_score=Decimal("65.00"), match_factores={"h": 65}
+        )
+
+        # No debe escapar Perfil.DoesNotExist (excepcion de ORM, no de
+        # dominio): verificar_carga debe resolverlo, no filtrarlo.
+        membresia = s.aceptar_postulacion(postulacion, decidido_por=self.creador)
+
+        self.assertIsInstance(membresia, EquipoMembresia)
+        self.assertTrue(Perfil.objects.filter(usuario=sin_perfil).exists())
