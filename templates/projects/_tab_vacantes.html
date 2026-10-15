@@ -131,7 +131,7 @@
                             </svg>
                         </button>
                     {% else %}
-                        <div></div> <!-- Espaciador flex si no hay botón de score -->
+                        <div></div>
                     {% endif %}
 
                     <!-- Botón Postularme -->
@@ -156,7 +156,7 @@
                     </div>
                 </div>
 
-                <!-- Dashboard Desplegable de Match Score Animado (Datos 100% Reales) -->
+                <!-- Dashboard Desplegable de Match Score -->
                 {% if vacante.score_total is not None %}
                 <div id="match-panel-{{ vacante.id|default:forloop.counter }}" 
                      class="grid grid-rows-[0fr] opacity-0 transition-all duration-300 ease-in-out">
@@ -164,13 +164,13 @@
                         <div class="mt-6 rounded-[24px] bg-violet-50/50 p-6 ring-1 ring-violet-100 sm:p-8">
                             <div class="flex flex-col gap-8 md:flex-row md:items-center">
                                 
-                                <!-- Puntuación Global (Dona) -->
+                                <!-- Puntuación Global -->
                                 <div class="flex shrink-0 flex-col items-center gap-3 md:w-[150px]">
                                     {% include "core/_score_ring.html" with pct=vacante.score_total|floatformat:"0" size="h-[100px] w-[100px]" stroke_class="stroke-violet-700" text_class="text-violet-700" track_class="stroke-violet-100" %}
                                     <span class="text-sm font-bold text-violet-700">Compatibilidad</span>
                                 </div>
 
-                                <!-- Desglose de Factores (Barras extraídas del dict 'factores') -->
+                                <!-- Desglose de Factores -->
                                 <div class="flex-1 w-full">
                                     <h4 class="mb-5 text-base font-extrabold text-slate-900">Desglose de factores</h4>
                                     <div class="grid grid-cols-1 gap-x-10 gap-y-5 sm:grid-cols-2">
