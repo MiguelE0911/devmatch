@@ -120,6 +120,12 @@ class Vacante(models.Model):
 
     class Meta:
         db_table = "vacantes"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(cupos_ocupados__lte=models.F("cupos_totales")),
+                name="chk_cupos_no_exceden",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.titulo} ({self.proyecto.nombre})"
