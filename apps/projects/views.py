@@ -12,7 +12,7 @@ from django.views import View
 from django.views.generic import CreateView, DetailView, UpdateView
 from apps.matching.engine import calcular_match_score
 from apps.matching.models import ConfiguracionPesosMatching
-from apps.applications.services import _construir_perfil_matching, _construir_vacante_matching
+from apps.applications.services import construir_perfil_matching, construir_vacante_matching
 
 from .forms import ProyectoForm, ProyectoMediaForm, VacanteForm
 from .models import Proyecto, ProyectoMedia, Vacante
@@ -103,7 +103,7 @@ def datos_laterales(proyecto, usuario):
                 "experiencia": float(pesos_activos.peso_experiencia),
                 "disponibilidad": float(pesos_activos.peso_disponibilidad),
             }
-            perfil_matching = _construir_perfil_matching(usuario)
+            perfil_matching = construir_perfil_matching(usuario)
 
     for vacante in vacantes:
         vacante.habilidades = [
@@ -130,14 +130,17 @@ def datos_laterales(proyecto, usuario):
         # y no está ya postulado (lo de "ya postulado" llega con el modelo de
         # postulaciones, Etapa 2). La vista Dueño lo mantiene deshabilitado.
         vacante.puede_postularse = (
-            usuario.is_authenticated and not es_dueno and vacante.cupos_libres > 0
+            usuario.is_authenticated 
+            and not es_dueno 
+            and vacante.cupos_libres > 0 
+            and vacante.estado == Vacante.ESTADO_ABIERTA
         )
 
         # Calculamos y anexamos el Match Score dinámicamente a la vacante
         vacante.score_total = None
         vacante.factores = None
         if perfil_matching and pesos:
-            vacante_matching = _construir_vacante_matching(vacante)
+            vacante_matching = construir_vacante_matching(vacante)
             score_total, factores = calcular_match_score(perfil_matching, vacante_matching, pesos)
             vacante.score_total = score_total
             vacante.factores = factores
