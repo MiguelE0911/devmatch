@@ -9,9 +9,12 @@ from .models import Habilidad, Interes, Perfil, Tecnologia, Usuario
 # Estilo compartido de TODOS los inputs de las pantallas de auth
 # (spec: fondo #F5F5F5, borde #7A7A7A, radio ~8px, alto ~56px,
 # placeholder #959595, esquinas NO pill).
+# `peer` + `pt-4` habilitan el "floating label": la etiqueta visible la
+# dibuja templates/accounts/_auth_input.html dentro de la caja y sube al
+# enfocar/escribir (el placeholder es solo un espacio).
 INPUT_CLASSES = (
-    "h-14 w-full rounded-lg border border-[#7A7A7A]/60 bg-[#F5F5F5] "
-    "px-4 text-sm text-slate-900 placeholder:text-[#959595] transition "
+    "peer h-14 w-full rounded-lg border border-[#7A7A7A]/60 bg-[#F5F5F5] "
+    "px-4 pt-4 text-sm text-slate-900 placeholder:text-[#959595] transition "
     "focus:border-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-400/40"
 )
 
@@ -21,6 +24,14 @@ USERNAME_VALIDATOR = RegexValidator(
     message="Solo letras, números y los símbolos _ . - (de 3 a 30 caracteres).",
 )
 
+# Nombre y apellido: letras (incl. acentos/ñ), espacios, guiones y
+# apóstrofos. Sin números, emojis ni símbolos. La longitud la fija
+# max_length del campo (50) — más estricta que el 150 del modelo.
+NOMBRE_VALIDATOR = RegexValidator(
+    regex=r"^[A-Za-z\u00C0-\u00FF]+(?:[ '-][A-Za-z\u00C0-\u00FF]+)*$",
+    message="Solo letras (con acentos), espacios, guiones y apóstrofos.",
+)
+
 # Mensaje de login genérico: no revela si el correo existe ni si la cuenta
 # está desactivada/bloqueada (decisión de equipo).
 ERROR_LOGIN = "Correo electrónico o contraseña incorrectos."
@@ -28,8 +39,10 @@ ERROR_LOGIN = "Correo electrónico o contraseña incorrectos."
 PASSWORD_INPUT_CLASSES = INPUT_CLASSES + " pr-14"  # espacio para el ojito
 
 
-def _atributos(clases, placeholder, **extra):
-    attrs = {"class": clases, "placeholder": placeholder}
+def _atributos(clases, **extra):
+    # placeholder = " " (un espacio): habilita :placeholder-shown para el
+    # floating label; el texto guía lo aporta la etiqueta del template.
+    attrs = {"class": clases, "placeholder": " "}
     attrs.update(extra)
     return attrs
 
@@ -66,7 +79,6 @@ class LoginForm(AuthenticationForm):
         widget=forms.TextInput(
             attrs=_atributos(
                 INPUT_CLASSES,
-                "Correo electrónico o usuario",
                 autocomplete="username",
                 autocapitalize="none",
                 autocorrect="off",
@@ -79,7 +91,6 @@ class LoginForm(AuthenticationForm):
         widget=forms.PasswordInput(
             attrs=_atributos(
                 PASSWORD_INPUT_CLASSES,
-                "Contraseña",
                 autocomplete="current-password",
             )
         ),
@@ -113,12 +124,12 @@ class RegistroForm(forms.ModelForm):
 
     username = forms.CharField(
         label="Nombre de usuario",
+        max_length=30,
         validators=[USERNAME_VALIDATOR],
         help_text="Máximo 30 caracteres: letras, números y los símbolos _ . -",
         widget=forms.TextInput(
             attrs=_atributos(
                 INPUT_CLASSES,
-                "Nombre de usuario",
                 autocomplete="username",
                 autocapitalize="none",
             )
@@ -126,11 +137,11 @@ class RegistroForm(forms.ModelForm):
     )
     email = forms.EmailField(
         label="Correo electrónico",
+        max_length=254,
         help_text="Usá un correo válido (ej. nombre@dominio.com).",
         widget=forms.EmailInput(
             attrs=_atributos(
                 INPUT_CLASSES,
-                "Correo electrónico",
                 autocomplete="email",
                 autocapitalize="none",
             )
@@ -138,22 +149,24 @@ class RegistroForm(forms.ModelForm):
     )
     first_name = forms.CharField(
         label="Nombre",
-        help_text="Tu nombre (ej. María).",
+        max_length=50,
+        validators=[NOMBRE_VALIDATOR],
+        help_text="Tu nombre (ej. María). Máximo 50 caracteres.",
         widget=forms.TextInput(
             attrs=_atributos(
                 INPUT_CLASSES,
-                "Nombre",
                 autocomplete="given-name",
             )
         ),
     )
     last_name = forms.CharField(
         label="Apellido",
-        help_text="Tu apellido (ej. Gutiérrez).",
+        max_length=50,
+        validators=[NOMBRE_VALIDATOR],
+        help_text="Tu apellido (ej. Gutiérrez). Máximo 50 caracteres.",
         widget=forms.TextInput(
             attrs=_atributos(
                 INPUT_CLASSES,
-                "Apellido",
                 autocomplete="family-name",
             )
         ),
@@ -164,7 +177,6 @@ class RegistroForm(forms.ModelForm):
         widget=forms.PasswordInput(
             attrs=_atributos(
                 PASSWORD_INPUT_CLASSES,
-                "Contraseña",
                 autocomplete="new-password",
                 minlength="8",
             )
@@ -176,7 +188,6 @@ class RegistroForm(forms.ModelForm):
         widget=forms.PasswordInput(
             attrs=_atributos(
                 PASSWORD_INPUT_CLASSES,
-                "Confirmar contraseña",
                 autocomplete="new-password",
                 minlength="8",
             )
@@ -261,6 +272,7 @@ class ProfileEditForm(forms.ModelForm):
 
     username = forms.CharField(
         label="Nombre de usuario",
+        max_length=30,
         validators=[USERNAME_VALIDATOR],
         widget=forms.TextInput(
             attrs=_perfil_atributos(
@@ -274,6 +286,8 @@ class ProfileEditForm(forms.ModelForm):
     first_name = forms.CharField(
         label="Nombre",
         required=False,
+        max_length=50,
+        validators=[NOMBRE_VALIDATOR],
         widget=forms.TextInput(
             attrs=_perfil_atributos(
                 PROFILE_INPUT_CLASSES, "Nombre", autocomplete="given-name"
@@ -283,6 +297,8 @@ class ProfileEditForm(forms.ModelForm):
     last_name = forms.CharField(
         label="Apellido",
         required=False,
+        max_length=50,
+        validators=[NOMBRE_VALIDATOR],
         widget=forms.TextInput(
             attrs=_perfil_atributos(
                 PROFILE_INPUT_CLASSES, "Apellido", autocomplete="family-name"
