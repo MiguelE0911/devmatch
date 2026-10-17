@@ -1,5 +1,6 @@
 from django import forms
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.utils import timezone
 
 from .models import Habilidad, Interes, Perfil, Tecnologia, Usuario
 
@@ -44,6 +45,35 @@ class UsuarioCreationForm(forms.ModelForm):
         return usuario
 
 
+class UsuarioChangeForm(forms.ModelForm):
+    """Formulario de edición de un usuario en el admin. Bloquear una cuenta
+    exige indicar el motivo; quién bloqueó y cuándo los registra el sistema
+    (UsuarioAdmin.save_model), no se escriben a mano."""
+
+    class Meta:
+        model = Usuario
+        fields = (
+            "email",
+            "username",
+            "first_name",
+            "last_name",
+            "es_admin",
+            "es_activo",
+            "esta_bloqueado",
+            "motivo_bloqueo",
+        )
+
+    def clean(self):
+        datos = super().clean()
+        if datos.get("esta_bloqueado") and not (
+            datos.get("motivo_bloqueo") or ""
+        ).strip():
+            self.add_error(
+                "motivo_bloqueo", "Indica el motivo para bloquear la cuenta."
+            )
+        return datos
+
+
 @admin.register(Usuario)
 class UsuarioAdmin(admin.ModelAdmin):
     # Ya NO hereda de DjangoUserAdmin: esa clase asume campos que
@@ -52,14 +82,13 @@ class UsuarioAdmin(admin.ModelAdmin):
     # coincidir exactamente con el esquema oficial (sin esas tablas).
     model = Usuario
     add_form = UsuarioCreationForm
+    change_form = UsuarioChangeForm
     ordering = ("email",)
 
     # add_form/add_fieldsets no los usa el ModelAdmin base por sí solo
     # (son parte de UserAdmin); se replican aquí los dos hooks mínimos.
     def get_form(self, request, obj=None, **kwargs):
-        defaults = {}
-        if obj is None:
-            defaults["form"] = self.add_form
+        defaults = {"form": self.add_form if obj is None else self.change_form}
         defaults.update(kwargs)
         return super().get_form(request, obj, **defaults)
 
@@ -77,7 +106,48 @@ class UsuarioAdmin(admin.ModelAdmin):
     )
     list_filter = ("es_admin", "es_activo", "esta_bloqueado")
     search_fields = ("email", "username", "first_name", "last_name")
-    readonly_fields = ("creado_en", "actualizado_en", "last_login", "password")
+    readonly_fields = (
+        "creado_en",
+        "actualizado_en",
+        "last_login",
+        "password",
+        "bloqueado_en",
+        "bloqueado_por",
+    )
+    actions = ["desactivar_usuarios"]
+
+    # Un usuario nunca se borra: el trigger trg_bloquear_borrado_usuarios
+    # rechaza el DELETE. Se quita el borrado del admin (y con él la acción
+    # "Eliminar seleccionados") y se ofrece desactivar o bloquear la cuenta.
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def save_model(self, request, obj, form, change):
+        # Quién bloqueó y cuándo lo pone el sistema al momento de bloquear.
+        if obj.esta_bloqueado and (not change or "esta_bloqueado" in form.changed_data):
+            obj.bloqueado_por = request.user
+            obj.bloqueado_en = timezone.now()
+        super().save_model(request, obj, form, change)
+
+    @admin.action(description="Desactivar usuarios seleccionados (en lugar de borrarlos)")
+    def desactivar_usuarios(self, request, queryset):
+        # Pendiente (CR-20, Etapa 3): registrar cada baja con
+        # audit.services.log_action cuando exista ese servicio.
+        objetivos = queryset.filter(es_activo=True).exclude(pk=request.user.pk)
+        cantidad = objetivos.update(
+            es_activo=False,
+            desactivado_en=timezone.now(),
+            desactivado_por=request.user,
+        )
+        self.message_user(
+            request, f"{cantidad} usuario(s) desactivado(s).", messages.SUCCESS
+        )
+        if queryset.filter(pk=request.user.pk).exists():
+            self.message_user(
+                request,
+                "Tu propia cuenta no se desactiva desde esta acción.",
+                messages.WARNING,
+            )
 
     fieldsets = (
         (None, {"fields": ("email", "username", "password")}),
