@@ -110,26 +110,124 @@
                     </div>
                 </div>
 
-                <div class="mt-8 flex justify-end">
-                    {% if vacante.puede_postularse %}
-                        {# Se agregó data-modal-toggle para disparar el modal frontend #}
-                        <button type="button" data-modal-toggle="modal-postulacion"
-                                class="inline-flex items-center gap-2 rounded-full bg-violet-700 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-violet-800">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4">
-                                <path fill-rule="evenodd" d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" clip-rule="evenodd"/>
+                <!-- Contenedor Inferior: Botones -->
+                <div class="mt-8 flex flex-wrap items-center justify-between gap-4">
+                    
+                    <!-- Botón Toggle: Ver Match Score (Solo visible si hay score calculado) -->
+                    {% if vacante.score_total is not None %}
+                        <button type="button" 
+                                onclick="
+                                    const panel = document.getElementById('match-panel-{{ vacante.id|default:forloop.counter }}');
+                                    panel.classList.toggle('grid-rows-[0fr]');
+                                    panel.classList.toggle('grid-rows-[1fr]');
+                                    panel.classList.toggle('opacity-0');
+                                    panel.classList.toggle('opacity-100');
+                                    this.querySelector('svg').classList.toggle('rotate-180');
+                                "
+                                class="flex items-center gap-1.5 text-sm font-bold text-violet-700 transition-colors hover:text-violet-800">
+                            Ver Match Score
+                            <svg class="h-5 w-5 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                             </svg>
-                            Postularme
                         </button>
                     {% else %}
-                        <button type="button" disabled title="{% if es_dueno %}Eres el creador de este proyecto{% else %}Publicación completa{% endif %}"
-                                class="inline-flex cursor-not-allowed items-center gap-2 rounded-full bg-app-disabled px-6 py-3 text-sm font-semibold text-white">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4">
-                                <path fill-rule="evenodd" d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" clip-rule="evenodd"/>
-                            </svg>
-                            Postularme
-                        </button>
+                        <div></div>
                     {% endif %}
+
+                    <!-- Botón Postularme -->
+                    <div>
+                        {% if vacante.puede_postularse %}
+                            <button type="button" data-modal-toggle="modal-postulacion"
+                                    class="inline-flex items-center gap-2 rounded-full bg-violet-700 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-violet-800">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4">
+                                    <path fill-rule="evenodd" d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" clip-rule="evenodd"/>
+                                </svg>
+                                Postularme
+                            </button>
+                        {% else %}
+                            <button type="button" disabled title="{% if es_dueno %}Eres el creador de este proyecto{% else %}Publicación completa{% endif %}"
+                                    class="inline-flex cursor-not-allowed items-center gap-2 rounded-full bg-slate-300 px-6 py-3 text-sm font-semibold text-white">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4">
+                                    <path fill-rule="evenodd" d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" clip-rule="evenodd"/>
+                                </svg>
+                                Postularme
+                            </button>
+                        {% endif %}
+                    </div>
                 </div>
+
+                <!-- Dashboard Desplegable de Match Score -->
+                {% if vacante.score_total is not None %}
+                <div id="match-panel-{{ vacante.id|default:forloop.counter }}" 
+                     class="grid grid-rows-[0fr] opacity-0 transition-all duration-300 ease-in-out">
+                    <div class="overflow-hidden">
+                        <div class="mt-6 rounded-[24px] bg-violet-50/50 p-6 ring-1 ring-violet-100 sm:p-8">
+                            <div class="flex flex-col gap-8 md:flex-row md:items-center">
+                                
+                                <!-- Puntuación Global -->
+                                <div class="flex shrink-0 flex-col items-center gap-3 md:w-[150px]">
+                                    {% include "core/_score_ring.html" with pct=vacante.score_total|floatformat:"0" size="h-[100px] w-[100px]" stroke_class="stroke-violet-700" text_class="text-violet-700" track_class="stroke-violet-100" %}
+                                    <span class="text-sm font-bold text-violet-700">Compatibilidad</span>
+                                </div>
+
+                                <!-- Desglose de Factores -->
+                                <div class="flex-1 w-full">
+                                    <h4 class="mb-5 text-base font-extrabold text-slate-900">Desglose de factores</h4>
+                                    <div class="grid grid-cols-1 gap-x-10 gap-y-5 sm:grid-cols-2">
+                                        
+                                        <!-- Habilidades -->
+                                        <div class="space-y-2">
+                                            <div class="flex items-center justify-between gap-2 text-sm">
+                                                <span class="font-medium text-slate-700 truncate">Habilidades</span>
+                                                <span class="shrink-0 font-bold text-violet-700">{{ vacante.factores.habilidades.score|floatformat:"0" }}%</span>
+                                            </div>
+                                            {% include "core/_factor_bar.html" with pct=vacante.factores.habilidades.score|floatformat:"0" track_class="bg-violet-100" fill_class="bg-violet-700" %}
+                                        </div>
+                                        
+                                        <!-- Nivel Técnico -->
+                                        <div class="space-y-2">
+                                            <div class="flex items-center justify-between gap-2 text-sm">
+                                                <span class="font-medium text-slate-700 truncate">Nivel Técnico</span>
+                                                <span class="shrink-0 font-bold text-violet-700">{{ vacante.factores.nivel.score|floatformat:"0" }}%</span>
+                                            </div>
+                                            {% include "core/_factor_bar.html" with pct=vacante.factores.nivel.score|floatformat:"0" track_class="bg-violet-100" fill_class="bg-violet-700" %}
+                                        </div>
+                                        
+                                        <!-- Tecnologías -->
+                                        <div class="space-y-2">
+                                            <div class="flex items-center justify-between gap-2 text-sm">
+                                                <span class="font-medium text-slate-700 truncate">Tecnologías</span>
+                                                <span class="shrink-0 font-bold text-violet-700">{{ vacante.factores.tecnologias.score|floatformat:"0" }}%</span>
+                                            </div>
+                                            {% include "core/_factor_bar.html" with pct=vacante.factores.tecnologias.score|floatformat:"0" track_class="bg-violet-100" fill_class="bg-violet-700" %}
+                                        </div>
+                                        
+                                        <!-- Experiencia -->
+                                        <div class="space-y-2">
+                                            <div class="flex items-center justify-between gap-2 text-sm">
+                                                <span class="font-medium text-slate-700 truncate">Experiencia</span>
+                                                <span class="shrink-0 font-bold text-violet-700">{{ vacante.factores.experiencia.score|floatformat:"0" }}%</span>
+                                            </div>
+                                            {% include "core/_factor_bar.html" with pct=vacante.factores.experiencia.score|floatformat:"0" track_class="bg-violet-100" fill_class="bg-violet-700" %}
+                                        </div>
+                                        
+                                        <!-- Disponibilidad -->
+                                        <div class="space-y-2">
+                                            <div class="flex items-center justify-between gap-2 text-sm">
+                                                <span class="font-medium text-slate-700 truncate">Disponibilidad</span>
+                                                <span class="shrink-0 font-bold text-violet-700">{{ vacante.factores.disponibilidad.score|floatformat:"0" }}%</span>
+                                            </div>
+                                            {% include "core/_factor_bar.html" with pct=vacante.factores.disponibilidad.score|floatformat:"0" track_class="bg-violet-100" fill_class="bg-violet-700" %}
+                                        </div>
+
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
             </article>
         {% endfor %}
     {% else %}

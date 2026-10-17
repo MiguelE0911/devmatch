@@ -75,7 +75,7 @@ class CargaIncompatible(Exception):
         )
 
 
-def _construir_perfil_matching(usuario):
+def construir_perfil_matching(usuario):
     # El Perfil NO se crea automáticamente al registrarse: las vistas de
     # accounts lo crean con get_or_create la primera vez que el usuario
     # entra a editarlo. Aquí se hace igual, para que un usuario que aún
@@ -101,7 +101,7 @@ def _construir_perfil_matching(usuario):
     )
 
 
-def _construir_vacante_matching(vacante):
+def construir_vacante_matching(vacante):
     habilidades_ids = set(
         VacanteHabilidadRequerida.objects.filter(vacante=vacante).values_list(
             "habilidad_id", flat=True
@@ -148,8 +148,8 @@ def crear_postulacion(usuario, vacante):
         "disponibilidad": float(pesos_activos.peso_disponibilidad),
     }
 
-    perfil_matching = _construir_perfil_matching(usuario)
-    vacante_matching = _construir_vacante_matching(vacante)
+    perfil_matching = construir_perfil_matching(usuario)
+    vacante_matching = construir_vacante_matching(vacante)
     score, factores = calcular_match_score(perfil_matching, vacante_matching, pesos)
 
     try:
