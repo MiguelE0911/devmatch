@@ -90,6 +90,40 @@ class UsuarioAdminBloqueoTests(TestCase):
         self.objetivo.refresh_from_db()
         self.assertEqual(self.objetivo.bloqueado_por, otro)
 
+    def test_save_model_registra_quien_y_cuando_desactiva(self):
+        self.objetivo.es_activo = False
+        form = SimpleNamespace(changed_data=["es_activo"])
+        self.admin.save_model(self.request, self.objetivo, form, change=True)
+
+        self.objetivo.refresh_from_db()
+        self.assertEqual(self.objetivo.desactivado_por, self.supervisor)
+        self.assertIsNotNone(self.objetivo.desactivado_en)
+
+    def test_save_model_no_cambia_la_desactivacion_si_no_cambia_es_activo(self):
+        otro = Usuario.objects.create_user(
+            "otro2@devmatch.test", "otro2", password="Clave-123!"
+        )
+        self.objetivo.es_activo = False
+        self.objetivo.desactivado_por = otro
+        self.objetivo.save()
+
+        self.objetivo.first_name = "Nuevo"
+        form = SimpleNamespace(changed_data=["first_name"])
+        self.admin.save_model(self.request, self.objetivo, form, change=True)
+
+        self.objetivo.refresh_from_db()
+        self.assertEqual(self.objetivo.desactivado_por, otro)
+
+    def test_los_campos_que_pone_el_sistema_son_de_solo_lectura(self):
+        for campo in (
+            "bloqueado_en",
+            "bloqueado_por",
+            "desactivado_en",
+            "desactivado_por",
+        ):
+            with self.subTest(campo=campo):
+                self.assertIn(campo, self.admin.readonly_fields)
+
     def test_el_admin_no_ofrece_borrado_fisico(self):
         self.assertFalse(self.admin.has_delete_permission(self.request, self.objetivo))
         acciones = self.admin.get_actions(self.request)

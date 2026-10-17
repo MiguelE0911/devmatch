@@ -113,6 +113,8 @@ class UsuarioAdmin(admin.ModelAdmin):
         "password",
         "bloqueado_en",
         "bloqueado_por",
+        "desactivado_en",
+        "desactivado_por",
     )
     actions = ["desactivar_usuarios"]
 
@@ -123,10 +125,14 @@ class UsuarioAdmin(admin.ModelAdmin):
         return False
 
     def save_model(self, request, obj, form, change):
-        # Quién bloqueó y cuándo lo pone el sistema al momento de bloquear.
+        # Quién bloqueó/desactivó y cuándo lo pone el sistema en el momento
+        # del cambio; en el formulario esos campos son de solo lectura.
         if obj.esta_bloqueado and (not change or "esta_bloqueado" in form.changed_data):
             obj.bloqueado_por = request.user
             obj.bloqueado_en = timezone.now()
+        if not obj.es_activo and change and "es_activo" in form.changed_data:
+            obj.desactivado_por = request.user
+            obj.desactivado_en = timezone.now()
         super().save_model(request, obj, form, change)
 
     @admin.action(description="Desactivar usuarios seleccionados (en lugar de borrarlos)")
