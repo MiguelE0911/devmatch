@@ -247,6 +247,13 @@ def actualizar_vacante(
                 "No se puede bajar a menos de los cupos ya ocupados "
                 f"({vacante.cupos_ocupados})."
             )
+        if estado == Vacante.ESTADO_ABIERTA and vacante.estado == Vacante.ESTADO_CANCELADA:
+            # Reapertura: se relee el proyecto con bloqueo de fila, igual que
+            # en crear_vacante, para que no cambie de estado entre la
+            # validación y el guardado.
+            vacante.proyecto = Proyecto.objects.select_for_update().get(
+                pk=vacante.proyecto_id
+            )
         nuevo_estado = _estado_resultante(vacante, estado, cupos_totales)
 
         vacante.titulo = titulo
