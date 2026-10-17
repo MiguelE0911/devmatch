@@ -104,6 +104,22 @@ class ProyectoForm(InputClassesMixin, forms.ModelForm):
             )
         return nuevo_estado
 
+    def clean_logo(self):
+        """
+        Funciones preparadas para Etapa 3 (archivos físicos). No se ejecuta
+        hasta que exista un campo 'logo' (ImageField) real en el form.
+        """
+        logo = self.cleaned_data.get("logo")
+        if logo and hasattr(logo, 'size'):
+            limite_mb = 2
+            if logo.size > limite_mb * 1024 * 1024:
+                raise forms.ValidationError(f"El logo no puede pesar más de {limite_mb} MB.")
+            
+            tipos_permitidos = ['image/jpeg', 'image/png', 'image/webp']
+            if getattr(logo, 'content_type', '') not in tipos_permitidos:
+                raise forms.ValidationError("Formato no soportado. Usa JPG, PNG o WEBP.")
+        return logo
+
     def save(self, commit=True):
         proyecto = super().save(commit=False)
         nuevo_estado = self.cleaned_data.get("estado")
@@ -179,6 +195,22 @@ class ProyectoMediaForm(InputClassesMixin, forms.ModelForm):
                 "La URL debe empezar con http(s):// o / (ruta de media)."
             )
         return url
+
+    def clean_archivo(self):
+        """
+        Adorno preparado para Etapa 3 (archivos físicos). No se ejecuta
+        hasta que exista un campo 'archivo' (ImageField) real en el form.
+        """
+        archivo = self.cleaned_data.get("archivo")
+        if archivo and hasattr(archivo, 'size'):
+            limite_mb = 5
+            if archivo.size > limite_mb * 1024 * 1024:
+                raise forms.ValidationError(f"La imagen no puede pesar más de {limite_mb} MB.")
+            
+            tipos_permitidos = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+            if getattr(archivo, 'content_type', '') not in tipos_permitidos:
+                raise forms.ValidationError("Formato no soportado. Sube una imagen JPG, PNG, WEBP o GIF.")
+        return archivo
 
     def save(self, commit=True):
         media = super().save(commit=False)
