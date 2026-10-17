@@ -130,6 +130,15 @@ class Vacante(models.Model):
     def __str__(self):
         return f"{self.titulo} ({self.proyecto.nombre})"
 
+    @property
+    def esta_abierta(self):
+        """Admite postulaciones: estado 'abierta' y no oculta."""
+        return self.estado == self.ESTADO_ABIERTA and self.es_activo
+
+    @property
+    def tiene_cupo_libre(self):
+        return self.cupos_ocupados < self.cupos_totales
+
 
 # ---------------------------------------------------------------------------
 # PROYECTO MEDIA
