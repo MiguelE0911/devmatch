@@ -119,15 +119,24 @@ Estos cinco casos están automatizados en
 python manage.py test apps.matching.tests.test_engine --noinput --keepdb
 ```
 
-## 6. Qué NO valida `crear_postulacion`
+## 6. Qué valida `crear_postulacion`
 
-`crear_postulacion` **no comprueba** que la vacante esté abierta ni que el
-proyecto sea visible. Esa validación corresponde a las **vistas** (Squad B),
-según `DEVMATCH-BD.md` §7 (un proyecto en `borrador` no debe recibir
-postulaciones: "filtro en las vistas/queries") y §9 (el botón "Postularme" se
-deshabilita si `vacantes.estado` no es `abierta`).
+`crear_postulacion` **sí comprueba** que la vacante admita postulaciones:
 
-Lo que el servicio sí garantiza:
+- Que esté **activa** y en estado **`abierta`**.
+- Que su proyecto **no esté `finalizado` ni `cancelado`** (un proyecto cerrado
+  ya no recluta; esta regla no tiene trigger que la aplique, así que el
+  servicio es el punto donde se garantiza).
+
+Los dos casos levantan `VacanteNoPostulable`.
+
+Lo que **no** comprueba es que el proyecto sea *visible* (que no esté en
+`borrador`): esa validación corresponde a las **vistas** (Squad B), según
+`DEVMATCH-BD.md` §7 (un proyecto en `borrador` no debe recibir postulaciones:
+"filtro en las vistas/queries") y §9 (el botón "Postularme" se deshabilita si
+`vacantes.estado` no es `abierta`).
+
+Lo que además garantiza el servicio:
 
 - Calcula y congela el score y su desglose.
 - Impide una segunda postulación activa a la misma vacante

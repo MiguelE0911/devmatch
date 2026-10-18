@@ -21,6 +21,7 @@ from .services import (
     ESTADOS_CERRADOS,
     TRANSICIONES_VALIDAS,
     VacanteInvalida,
+    cambiar_estado,
     puede_agregar_imagenes,
     puede_agregar_vacantes,
 )
@@ -265,9 +266,12 @@ class VacancyCreateView(LoginRequiredMixin, CreateView):
     """Alta de vacante sobre un proyecto. Solo el creador del proyecto.
 
     Solo se permite mientras el proyecto no esté cerrado (finalizado o
-    cancelado) — ver `services.puede_agregar_vacantes`. El gate vive en
-    `dispatch` (cubre GET y POST) y se revalida en `form_valid` por si el
-    estado cambió entre el render y el envío.
+    cancelado) — ver `services.puede_agregar_vacantes`. El gate de navegación
+    vive en `dispatch` y corta solo GET/HEAD: el POST llega siempre al
+    formulario, que delega en `services.crear_vacante`; si el proyecto está
+    cerrado el servicio lanza `ProyectoNoAceptaVacantes` y `form_valid` la
+    muestra como error no de campo (200). El servicio es la fuente de verdad
+    (regla del PR #10).
     """
 
     form_class = VacanteForm
@@ -282,7 +286,9 @@ class VacancyCreateView(LoginRequiredMixin, CreateView):
                 request, "Solo el creador del proyecto puede agregar vacantes."
             )
             return redirect("projects:project_detail", pk=self.proyecto.pk)
-        if not puede_agregar_vacantes(self.proyecto):
+        if request.method in ("GET", "HEAD") and not puede_agregar_vacantes(
+            self.proyecto
+        ):
             messages.error(
                 request,
                 "No se pueden agregar vacantes a un proyecto en estado "
@@ -305,27 +311,16 @@ class VacancyCreateView(LoginRequiredMixin, CreateView):
         return ctx
 
     def form_valid(self, form):
-        # Revalidar por si el proyecto se cerró entre el GET y el POST.
-        self.proyecto.refresh_from_db(fields=["estado"])
-        if not puede_agregar_vacantes(self.proyecto):
-            messages.error(
-                self.request,
-                "No se pueden agregar vacantes a un proyecto en estado "
-                f"«{self.proyecto.get_estado_display()}».",
-            )
-            return redirect(
-                reverse(
-                    "projects:project_detail", kwargs={"pk": self.proyecto.pk}
-                )
-                + "?tab=vacantes"
-            )
         form.instance.proyecto = self.proyecto
         form.instance.es_activo = True
         try:
             return super().form_valid(form)
         except VacanteInvalida as exc:
             # Regla de negocio del servicio (p. ej. proyecto finalizado o
-            # cancelado): se muestra como error del formulario.
+            # cancelado, cupos, estado de vacante): se muestra como error no
+            # de campo del formulario (200) y no se crea la vacante. El
+            # servicio relee el proyecto con select_for_update dentro de su
+            # transacción, así que no hace falta revalidar aquí.
             form.add_error(None, str(exc))
             return self.form_invalid(form)
 
@@ -663,8 +658,12 @@ class ProyectoDeleteView(LoginRequiredMixin, View):
             return redirect("projects:project_detail", pk=proyecto.pk)
 
         if Proyecto.ESTADO_CANCELADO in TRANSICIONES_VALIDAS.get(proyecto.estado, set()):
-            proyecto.estado = Proyecto.ESTADO_CANCELADO
-            proyecto.cancelado_en = timezone.now()
+            # Usar el servicio en lugar de asignar el estado a mano: además de
+            # validar la transición y registrar cancelado_en, cierra las
+            # vacantes que queden 'abiertas' (cerrar_vacantes_abiertas) —
+            # revisión: un proyecto cancelado no puede seguir con vacantes
+            # postulables.
+            cambiar_estado(proyecto, Proyecto.ESTADO_CANCELADO)
 
         proyecto.es_activo = False
         proyecto.desactivado_en = timezone.now()

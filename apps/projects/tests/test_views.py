@@ -269,6 +269,25 @@ class ProyectoDeleteTests(TestCase):
         self.assertIsNotNone(self.proyecto.desactivado_en)
         self.assertEqual(self.proyecto.desactivado_por, self.creador)
 
+    def test_borrar_proyecto_cancela_sus_vacantes_abiertas(self):
+        """Regresión (revisión): cancelar el proyecto cierra sus vacantes.
+
+        Sin `cambiar_estado` (que llama `cerrar_vacantes_abiertas`), el
+        proyecto quedaba cancelado con vacantes todavía en 'abierta'.
+        """
+        lleva_a(self.proyecto, Proyecto.ESTADO_RECLUTANDO)
+        Vacante.objects.create(
+            proyecto=self.proyecto,
+            titulo="Backend",
+            descripcion="desc",
+            cupos_totales=2,
+        )
+        self.client.force_login(self.creador)
+        resp = self.client.post(self.url)
+        self.assertEqual(resp.status_code, 302)
+        vacante = self.proyecto.vacantes.get()
+        self.assertEqual(vacante.estado, Vacante.ESTADO_CANCELADA)
+
 
 class ProyectoDetailVisibilidadTests(TestCase):
     def setUp(self):
@@ -484,13 +503,19 @@ class VacancyCreateEstadoTests(TestCase):
                 proyecto = self._proyecto_en(estado)
                 url = reverse("projects:vacancy_create", args=[proyecto.pk])
 
+                # GET: la navegación se corta con redirect + flash.
                 resp = self.client.get(url)
                 self.assertEqual(resp.status_code, 302)
                 self.assertIn("?tab=vacantes", resp.url)
 
+                # POST: no se intercepta en la vista; el servicio
+                # (crear_vacante, PR #10) rechaza el alta y la vista lo
+                # muestra como error del formulario (200) sin crear la
+                # vacante.
                 resp = self.client.post(url, self.DATOS)
-                self.assertEqual(resp.status_code, 302)
-                self.assertIn("?tab=vacantes", resp.url)
+                self.assertEqual(resp.status_code, 200)
+                self.assertContains(resp, "No se pueden agregar vacantes")
+                self.assertContains(resp, f"el proyecto está {estado}")
                 self.assertFalse(proyecto.vacantes.filter(titulo="Backend").exists())
 
     def test_detalle_del_dueno_muestra_cta_en_proyecto_abierto(self):
