@@ -444,9 +444,9 @@ class ProyectoGaleriaEditView(LoginRequiredMixin, CreateView):
     """Editor de la galería del proyecto (imágenes tipo `prototipo`).
 
     Espejo de `VacancyCreateView`: la página combina el form de alta de una
-    imagen (por URL, sin Pillow todavía) con la lista de imágenes activas y su
-    acción de desactivar. La "subida" es una URL en `archivo_url` (TEXT), igual
-    que `logo_url` — el procesado con Pillow llega como valor agregado.
+    imagen (subida de archivo procesada con Pillow, o URL) con la lista de
+    imágenes activas y su acción de desactivar. El valor final siempre queda
+    en `archivo_url` (ruta relativa /media/... o URL externa).
     """
 
     form_class = ProyectoMediaForm

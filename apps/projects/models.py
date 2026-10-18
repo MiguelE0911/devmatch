@@ -147,10 +147,11 @@ class Vacante(models.Model):
 
 class ProyectoMedia(models.Model):
     """
-    Tabla `proyecto_media`: logos y prototipos (procesados con Pillow más
-    adelante). A diferencia de proyectos/vacantes, es un adjunto y no un
-    registro crítico de negocio: no tiene actualizado_en ni
-    desactivado_por_id (ver DevMatch-BD, 5.2).
+    Tabla `proyecto_media`: logos y prototipos. La subida real se procesa con
+    Pillow (apps/projects/media_utils.py) y `archivo_url` guarda la ruta
+    relativa /media/... resultante o una URL externa pegada. A diferencia de
+    proyectos/vacantes, es un adjunto y no un registro crítico de negocio: no
+    tiene actualizado_en ni desactivado_por_id (ver DevMatch-BD, 5.2).
     """
 
     TIPO_LOGO = "logo"

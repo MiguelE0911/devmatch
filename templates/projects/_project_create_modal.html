@@ -15,6 +15,7 @@
         <h2 id="crear-proyecto-titulo" class="text-2xl font-bold text-slate-900 tracking-tight">Crear un nuevo proyecto</h2>
 
         <form method="post"
+              enctype="multipart/form-data"
               action="{% url 'projects:project_create' %}{% if volver_next %}?next={{ volver_next|urlencode }}{% endif %}"
               data-crear-form class="space-y-6">
             {% csrf_token %}
@@ -38,6 +39,15 @@
             </div>
 
             <div class="space-y-1.5">
+                <label for="{{ form.logo.id_for_label }}" class="block text-xs font-semibold text-slate-700">
+                    {{ form.logo.label }} <span class="font-normal italic text-slate-400">(opcional)</span>
+                </label>
+                {{ form.logo }}
+                <p class="text-[11px] text-slate-500">JPG, PNG o WEBP, hasta 2 MB. Se comprime y redimensiona al subirlo; tiene prioridad sobre la URL.</p>
+                <div class="text-red-500 text-xs">{{ form.logo.errors }}</div>
+            </div>
+
+            <div class="space-y-1.5">
                 <label for="{{ form.logo_url.id_for_label }}" class="block text-xs font-semibold text-slate-700">
                     {{ form.logo_url.label }} <span class="font-normal italic text-slate-400">(opcional)</span>
                 </label>
@@ -51,7 +61,7 @@
                     {{ form.logo_url }}
                 </div>
 
-                <p class="text-[11px] text-slate-500">Pega el enlace directo a la imagen (ej: https://imgur.com/...)</p>
+                <p class="text-[11px] text-slate-500">Alternativa: pegá el enlace directo (ej: https://imgur.com/...). Si subes un archivo, este campo se ignora.</p>
                 <div class="text-red-500 text-xs">{{ form.logo_url.errors }}</div>
             </div>
 

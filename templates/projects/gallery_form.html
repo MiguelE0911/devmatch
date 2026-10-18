@@ -11,19 +11,30 @@
         <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 class="text-lg font-bold text-slate-900">Editar galería</h2>
             <p class="mt-1 text-sm text-slate-500">
-                Carga capturas del prototipo pegando su URL. Ajusta el orden con las flechas y elimina las que ya no quieras.
+                Sube capturas del prototipo desde tu equipo (JPG, PNG, WEBP o GIF) o pega su URL. Ajusta el orden con las flechas y elimina las que ya no quieras.
             </p>
 
-            <form method="post" class="mt-6 space-y-6">
+            <form method="post" enctype="multipart/form-data" class="mt-6 space-y-6">
                 {% csrf_token %}
                 {{ form.non_field_errors }}
+
+                <div>
+                    <label for="{{ form.archivo.id_for_label }}" class="mb-1.5 block text-sm font-semibold text-slate-800">
+                        {{ form.archivo.label }}
+                    </label>
+                    <p class="mb-2 text-xs leading-relaxed text-slate-500">
+                        JPG, PNG, WEBP o GIF, hasta 5 MB. La imagen se comprime y redimensiona al subirla.
+                    </p>
+                    {{ form.archivo }}
+                    {{ form.archivo.errors }}
+                </div>
 
                 <div>
                     <label for="{{ form.archivo_url.id_for_label }}" class="mb-1.5 block text-sm font-semibold text-slate-800">
                         {{ form.archivo_url.label }}
                     </label>
                     <p class="mb-2 text-xs leading-relaxed text-slate-500">
-                        Dirección pública de la imagen (https://... o /media/...).
+                        o pega el enlace directo (https://... o /media/...). Dejalo vacío si subiste un archivo.
                     </p>
                     {{ form.archivo_url }}
                     {{ form.archivo_url.errors }}
