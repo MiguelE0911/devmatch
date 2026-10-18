@@ -31,6 +31,10 @@ from .models import Postulacion
 
 ESTADOS_ACEPTABLES = {Postulacion.ESTADO_PENDIENTE, Postulacion.ESTADO_PRESELECCIONADA}
 
+# Espejo de projects.services.ESTADOS_CERRADOS: un proyecto que ya cerró su
+# ciclo no debe recibir nuevas postulaciones.
+ESTADOS_PROYECTO_CERRADO = {Proyecto.ESTADO_FINALIZADO, Proyecto.ESTADO_CANCELADO}
+
 INDICE_POSTULACION_ACTIVA = "ux_postulacion_activa_unica"
 
 # No está definida en ninguna fuente del esquema (DEVMATCH-BD §7: el
@@ -59,6 +63,11 @@ class PostulacionNoAceptable(Exception):
 
 class VacanteSinCupo(Exception):
     """La vacante no tiene cupo disponible (llena, cancelada o inactiva)."""
+
+
+class VacanteNoPostulable(Exception):
+    """La vacante no admite postulaciones: está inactiva, no está 'abierta',
+    o su proyecto ya cerró (finalizado/cancelado)."""
 
 
 class CargaIncompatible(Exception):
@@ -122,16 +131,32 @@ def crear_postulacion(usuario, vacante):
     """
     Devuelve la Postulacion creada.
 
-    NO valida que la vacante esté abierta ni que el proyecto sea visible
-    (no esté en borrador): esa regla corresponde a las vistas, según
-    DEVMATCH-BD.md §7 y §9. Ver docs/DEVMATCH-MATCHING.md, sección 6.
+    No valida que el proyecto sea *visible* (no esté en borrador): esa regla
+    corresponde a las vistas, según DEVMATCH-BD.md §7 y §9. Ver
+    docs/DEVMATCH-MATCHING.md, sección 6. Sí valida, en cambio, que la vacante
+    admita postulaciones: la regla "un proyecto finalizado/cancelado ya no
+    recluta" no tiene trigger que la aplique, así que este es el punto donde
+    se garantiza.
 
     Levanta:
+    - VacanteNoPostulable si la vacante está inactiva, no está 'abierta', o su
+      proyecto ya está finalizado/cancelado.
     - PostulacionDuplicadaError si el usuario ya tiene una postulación
       activa a esta vacante -- capturarla en la vista y mostrar el mensaje
       amigable correspondiente.
     - ConfiguracionPesosNoDisponibleError si no hay pesos activos en la BD.
     """
+    if not vacante.es_activo or vacante.estado != Vacante.ESTADO_ABIERTA:
+        raise VacanteNoPostulable(
+            f"La vacante no admite postulaciones (estado='{vacante.estado}', "
+            f"es_activo={vacante.es_activo})."
+        )
+    if vacante.proyecto.estado in ESTADOS_PROYECTO_CERRADO:
+        raise VacanteNoPostulable(
+            "El proyecto ya no está abierto a postulaciones "
+            f"(estado='{vacante.proyecto.estado}')."
+        )
+
     try:
         pesos_activos = ConfiguracionPesosMatching.objects.get(es_activo=True)
     except ConfiguracionPesosMatching.DoesNotExist as exc:

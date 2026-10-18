@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.test import TestCase
+from django.utils import timezone
 
 from apps.accounts.models import Habilidad, Perfil, UsuarioHabilidad
 from apps.applications import models as m
@@ -11,6 +12,7 @@ from apps.applications.models import Postulacion
 from apps.applications.services import (
     ConfiguracionPesosNoDisponibleError,
     PostulacionDuplicadaError,
+    VacanteNoPostulable,
     crear_postulacion,
 )
 from apps.matching.models import ConfiguracionPesosMatching
@@ -113,6 +115,32 @@ class CrearPostulacionTests(TestCase):
         ConfiguracionPesosMatching.objects.update(es_activo=False)
         with self.assertRaises(ConfiguracionPesosNoDisponibleError):
             crear_postulacion(self.postulante, self.vacante)
+
+    def test_vacante_no_abierta_no_admite_postulacion(self):
+        self.vacante.estado = Vacante.ESTADO_CUBIERTA
+        self.vacante.save()
+        with self.assertRaises(VacanteNoPostulable):
+            crear_postulacion(self.postulante, self.vacante)
+        self.assertEqual(Postulacion.objects.count(), 0)
+
+    def test_proyecto_finalizado_no_admite_postulacion(self):
+        lleva_a(self.vacante.proyecto, Proyecto.ESTADO_FINALIZADO)
+        # La vacante sigue 'abierta' (cerrarla es tarea del servicio/form de
+        # projects): aquí se comprueba que el estado del proyecto por sí solo
+        # ya bloquea la postulación.
+        self.vacante.refresh_from_db()
+        self.assertEqual(self.vacante.estado, Vacante.ESTADO_ABIERTA)
+        with self.assertRaises(VacanteNoPostulable):
+            crear_postulacion(self.postulante, self.vacante)
+        self.assertEqual(Postulacion.objects.count(), 0)
+
+    def test_proyecto_cancelado_no_admite_postulacion(self):
+        self.vacante.proyecto.estado = Proyecto.ESTADO_CANCELADO
+        self.vacante.proyecto.cancelado_en = timezone.now()
+        self.vacante.proyecto.save()
+        with self.assertRaises(VacanteNoPostulable):
+            crear_postulacion(self.postulante, self.vacante)
+        self.assertEqual(Postulacion.objects.count(), 0)
 
 
 class AceptarPostulacionBase(TestCase):

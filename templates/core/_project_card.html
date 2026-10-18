@@ -19,7 +19,7 @@ monograma con las iniciales del proyecto sobre violeta sólido.
     {% comment %}— Fila superior: título + badge de estado —{% endcomment %}
     <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="text-lg font-bold text-slate-900 sm:text-2xl">
-            <a href="{% url 'projects:project_detail' proyecto.pk %}"
+            <a href="{% url 'projects:project_detail' proyecto.pk %}?next={{ request.get_full_path|urlencode }}"
                class="transition-colors hover:text-violet-700">{{ proyecto.nombre }}</a>
         </h2>
         <span class="inline-flex shrink-0 items-center gap-1.5 rounded-full {{ proyecto.badge }} px-3 py-1 text-xs font-bold uppercase tracking-wide">
@@ -78,7 +78,7 @@ monograma con las iniciales del proyecto sobre violeta sólido.
                 </svg>
                 Publicado {{ proyecto.publicado_hace }}
             </div>
-            <a href="{% url 'projects:project_detail' proyecto.pk %}"
+            <a href="{% url 'projects:project_detail' proyecto.pk %}?next={{ request.get_full_path|urlencode }}"
                class="mt-2 inline-flex items-center gap-2 rounded-[10px] bg-violet-700 px-6 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-violet-800">
                 Ver detalles
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">

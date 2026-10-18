@@ -20,6 +20,11 @@ class Command(BaseCommand):
     Es IDEMPOTENTE: se puede correr varias veces sin duplicar filas
     (get_or_create por email / creador+nombre). NO usa borrados físicos,
     respetando los triggers de bloqueo del esquema oficial.
+
+    TODO: revisar las vacantes que este seed crea en proyectos
+    finalizado/cancelado. Desde que el alta de vacantes se bloquea en
+    proyectos cerrados, esas filas quedan en un estado que la interfaz ya no
+    permite reproducir (siguen visibles como datos inconsistentes).
     """
 
     help = "Genera datos de prueba (fixtures) para Squad B."

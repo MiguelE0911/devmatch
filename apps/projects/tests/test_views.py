@@ -3,7 +3,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.projects.models import Proyecto, ProyectoMedia
+from apps.projects.models import Proyecto, ProyectoMedia, Vacante
 from apps.projects.tests.helpers import lleva_a
 
 import json
@@ -318,3 +318,271 @@ class ProyectoDetailVisibilidadTests(TestCase):
         )
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(resp.url.startswith("/ingresar/"))
+
+
+class ProyectoVolverTests(TestCase):
+    """El botón "Volver" del detalle es determinista: nunca history.back()."""
+
+    def setUp(self):
+        self.creador = Usuario.objects.create_user(
+            "creador-volver@devmatch.test", "creador-volver", password="Clave-123!"
+        )
+        self.proyecto = Proyecto.objects.create(
+            creador=self.creador,
+            nombre="Demo",
+            descripcion="desc",
+            estado=Proyecto.ESTADO_RECLUTANDO,
+        )
+        self.url = reverse("projects:project_detail", args=[self.proyecto.pk])
+
+    def test_volver_apunta_al_feed_y_no_usa_history_back(self):
+        resp = self.client.get(self.url)
+        self.assertContains(resp, reverse("core:feed"))
+        self.assertNotContains(resp, "history.back()")
+
+    def test_volver_honra_un_next_interno(self):
+        resp = self.client.get(self.url, {"next": "/home/?tecnologia=1"})
+        self.assertContains(resp, "/home/?tecnologia=1")
+
+    def test_volver_ignora_un_next_externo(self):
+        resp = self.client.get(self.url, {"next": "https://evil.example.com/"})
+        self.assertNotContains(resp, 'href="https://evil.example.com')
+        self.assertContains(resp, reverse("core:feed"))
+
+    def test_volver_vuelve_a_la_pagina_del_feed(self):
+        resp = self.client.get(self.url, {"next": "/home/?pagina=2"})
+        self.assertContains(resp, 'href="/home/?pagina=2"')
+
+
+class ProyectoPostulacionBloqueadaTests(TestCase):
+    """Un proyecto finalizado ya no muestra vacantes postulables."""
+
+    def setUp(self):
+        self.creador = Usuario.objects.create_user(
+            "creador-bloqueo@devmatch.test", "creador-bloqueo", password="Clave-123!"
+        )
+        self.otro = Usuario.objects.create_user(
+            "otro-bloqueo@devmatch.test", "otro-bloqueo", password="Clave-123!"
+        )
+        self.proyecto = Proyecto.objects.create(
+            creador=self.creador, nombre="Demo", descripcion="desc"
+        )
+        self.vacante = Vacante.objects.create(
+            proyecto=self.proyecto,
+            titulo="Backend",
+            descripcion="desc",
+            cupos_totales=2,
+        )
+        self.url = reverse("projects:project_detail", args=[self.proyecto.pk])
+
+    def test_vacante_no_postulable_en_proyecto_finalizado(self):
+        lleva_a(self.proyecto, Proyecto.ESTADO_FINALIZADO)
+        self.client.force_login(self.otro)
+        resp = self.client.get(self.url, {"tab": "vacantes"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "El proyecto ya no está abierto a postulaciones")
+
+
+class ProyectoCreateModalTests(TestCase):
+    """El modal de crear proyecto se sirve como fragmento por AJAX y devuelve
+    JSON al crear; sin AJAX conserva el flujo de página completa."""
+
+    def setUp(self):
+        self.creador = Usuario.objects.create_user(
+            "creador-modal@devmatch.test", "creador-modal", password="Clave-123!"
+        )
+        self.client.force_login(self.creador)
+        self.url = reverse("projects:project_create")
+        self.datos = {"nombre": "Nuevo", "descripcion": "desc", "logo_url": ""}
+
+    def test_get_ajax_devuelve_el_fragmento_del_modal(self):
+        resp = self.client.get(self.url, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "projects/_project_create_modal.html")
+        self.assertTemplateNotUsed(resp, "projects/project_create.html")
+        self.assertContains(resp, "data-crear-form")
+
+    def test_get_normal_devuelve_la_pagina_completa(self):
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "projects/project_create.html")
+
+    def test_post_ajax_valido_devuelve_json_con_redirect(self):
+        resp = self.client.post(
+            self.url, self.datos, HTTP_X_REQUESTED_WITH="XMLHttpRequest"
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data["ok"])
+        proyecto = Proyecto.objects.get(nombre="Nuevo")
+        self.assertEqual(data["redirect"], reverse("projects:project_detail", args=[proyecto.pk]))
+
+    def test_post_ajax_invalido_devuelve_422_con_errores(self):
+        resp = self.client.post(
+            self.url,
+            {"nombre": "", "descripcion": "desc", "logo_url": ""},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(resp.status_code, 422)
+        self.assertTemplateUsed(resp, "projects/_project_create_modal.html")
+        self.assertFalse(Proyecto.objects.filter(nombre="Nuevo").exists())
+
+    def test_post_normal_redirige_al_detalle(self):
+        resp = self.client.post(self.url, self.datos)
+        self.assertEqual(resp.status_code, 302)
+        proyecto = Proyecto.objects.get(nombre="Nuevo")
+        self.assertEqual(
+            resp.url, reverse("projects:project_detail", args=[proyecto.pk])
+        )
+
+
+class VacancyCreateEstadoTests(TestCase):
+    """Solo se agregan vacantes a proyectos abiertos (ni finalizado ni
+    cancelado). El bloqueo recae en el alta; editar/borrar no se toca."""
+
+    ESTADOS_PERMITIDOS = (
+        Proyecto.ESTADO_BORRADOR,
+        Proyecto.ESTADO_PUBLICADO,
+        Proyecto.ESTADO_RECLUTANDO,
+        Proyecto.ESTADO_EQUIPO_COMPLETO,
+        Proyecto.ESTADO_EN_DESARROLLO,
+    )
+    ESTADOS_BLOQUEADOS = (
+        Proyecto.ESTADO_FINALIZADO,
+        Proyecto.ESTADO_CANCELADO,
+    )
+    DATOS = {"titulo": "Backend", "descripcion": "desc", "cupos_totales": "2"}
+
+    def setUp(self):
+        self.creador = Usuario.objects.create_user(
+            "creador-vac-estado@devmatch.test",
+            "creador-vac-estado",
+            password="Clave-123!",
+        )
+        self.client.force_login(self.creador)
+
+    def _proyecto_en(self, estado):
+        proyecto = Proyecto.objects.create(
+            creador=self.creador, nombre=f"Demo {estado}", descripcion="desc"
+        )
+        if estado != Proyecto.ESTADO_BORRADOR:
+            lleva_a(proyecto, estado)
+        return proyecto
+
+    def test_permite_agregar_en_estados_abiertos(self):
+        for estado in self.ESTADOS_PERMITIDOS:
+            with self.subTest(estado=estado):
+                proyecto = self._proyecto_en(estado)
+                url = reverse("projects:vacancy_create", args=[proyecto.pk])
+                resp = self.client.post(url, self.DATOS)
+                self.assertEqual(resp.status_code, 302)
+                self.assertTrue(proyecto.vacantes.filter(titulo="Backend").exists())
+
+    def test_bloquea_agregar_en_estados_cerrados(self):
+        for estado in self.ESTADOS_BLOQUEADOS:
+            with self.subTest(estado=estado):
+                proyecto = self._proyecto_en(estado)
+                url = reverse("projects:vacancy_create", args=[proyecto.pk])
+
+                resp = self.client.get(url)
+                self.assertEqual(resp.status_code, 302)
+                self.assertIn("?tab=vacantes", resp.url)
+
+                resp = self.client.post(url, self.DATOS)
+                self.assertEqual(resp.status_code, 302)
+                self.assertIn("?tab=vacantes", resp.url)
+                self.assertFalse(proyecto.vacantes.filter(titulo="Backend").exists())
+
+    def test_detalle_del_dueno_muestra_cta_en_proyecto_abierto(self):
+        proyecto = self._proyecto_en(Proyecto.ESTADO_RECLUTANDO)
+        resp = self.client.get(
+            reverse("projects:project_detail", args=[proyecto.pk]),
+            {"tab": "vacantes"},
+        )
+        self.assertContains(resp, "Añadir vacante")
+        self.assertNotContains(resp, "No se pueden añadir vacantes")
+
+    def test_detalle_del_dueno_oculta_cta_en_proyecto_cerrado(self):
+        proyecto = self._proyecto_en(Proyecto.ESTADO_FINALIZADO)
+        resp = self.client.get(
+            reverse("projects:project_detail", args=[proyecto.pk]),
+            {"tab": "vacantes"},
+        )
+        self.assertNotContains(resp, "Añadir vacante")
+        self.assertContains(resp, "No se pueden añadir vacantes")
+
+
+class GaleriaAgregarImagenEstadoTests(TestCase):
+    """Solo se agregan imágenes a proyectos NO cancelados.
+
+    Un proyecto `finalizado` SÍ puede seguir subiendo imágenes de prototipos.
+    """
+
+    ESTADOS_PERMITIDOS = (
+        Proyecto.ESTADO_BORRADOR,
+        Proyecto.ESTADO_PUBLICADO,
+        Proyecto.ESTADO_RECLUTANDO,
+        Proyecto.ESTADO_EQUIPO_COMPLETO,
+        Proyecto.ESTADO_EN_DESARROLLO,
+        Proyecto.ESTADO_FINALIZADO,
+    )
+
+    def setUp(self):
+        self.creador = Usuario.objects.create_user(
+            "creador-gal-estado@devmatch.test",
+            "creador-gal-estado",
+            password="Clave-123!",
+        )
+        self.client.force_login(self.creador)
+
+    def _proyecto_en(self, estado):
+        proyecto = Proyecto.objects.create(
+            creador=self.creador, nombre=f"Demo {estado}", descripcion="desc"
+        )
+        if estado != Proyecto.ESTADO_BORRADOR:
+            lleva_a(proyecto, estado)
+        return proyecto
+
+    def test_permite_agregar_imagen_salvo_cancelado(self):
+        for estado in self.ESTADOS_PERMITIDOS:
+            with self.subTest(estado=estado):
+                proyecto = self._proyecto_en(estado)
+                url = reverse("projects:project_gallery_edit", args=[proyecto.pk])
+                resp = self.client.post(url, {"archivo_url": "https://e.com/img.png"})
+                self.assertEqual(resp.status_code, 302)
+                self.assertTrue(
+                    proyecto.media.filter(
+                        tipo=ProyectoMedia.TIPO_PROTOTIPO,
+                        archivo_url="https://e.com/img.png",
+                        es_activo=True,
+                    ).exists()
+                )
+
+    def test_bloquea_agregar_imagen_en_cancelado(self):
+        proyecto = self._proyecto_en(Proyecto.ESTADO_CANCELADO)
+        url = reverse("projects:project_gallery_edit", args=[proyecto.pk])
+
+        # El dueño sí puede entrar (para borrar/reordenar), pero el formulario
+        # de alta no se muestra y aparece el aviso.
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, "Subir imagen")
+        self.assertContains(resp, "No se pueden añadir imágenes")
+
+        resp = self.client.post(url, {"archivo_url": "https://e.com/img.png"})
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("?tab=galeria", resp.url)
+        self.assertFalse(
+            proyecto.media.filter(
+                tipo=ProyectoMedia.TIPO_PROTOTIPO,
+                archivo_url="https://e.com/img.png",
+            ).exists()
+        )
+
+    def test_formulario_de_alta_visible_en_estado_permitido(self):
+        proyecto = self._proyecto_en(Proyecto.ESTADO_FINALIZADO)
+        url = reverse("projects:project_gallery_edit", args=[proyecto.pk])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Subir imagen")
+        self.assertNotContains(resp, "No se pueden añadir imágenes")

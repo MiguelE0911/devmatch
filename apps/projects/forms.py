@@ -10,7 +10,11 @@ from .models import (
     VacanteHabilidadRequerida,
     VacanteTecnologiaRequerida,
 )
-from .services import TRANSICIONES_VALIDAS
+from .services import (
+    ESTADOS_CERRADOS,
+    TRANSICIONES_VALIDAS,
+    cerrar_vacantes_abiertas,
+)
 
 
 class InputClassesMixin:
@@ -129,14 +133,20 @@ class ProyectoForm(InputClassesMixin, forms.ModelForm):
     def save(self, commit=True):
         proyecto = super().save(commit=False)
         nuevo_estado = self.cleaned_data.get("estado")
+        cambio_a_cerrado = False
         if nuevo_estado and nuevo_estado != self._estado_original:
             proyecto.estado = nuevo_estado
             if nuevo_estado == Proyecto.ESTADO_FINALIZADO:
                 proyecto.finalizado_en = timezone.now()
             elif nuevo_estado == Proyecto.ESTADO_CANCELADO:
                 proyecto.cancelado_en = timezone.now()
+            cambio_a_cerrado = nuevo_estado in ESTADOS_CERRADOS
         if commit:
             proyecto.save()
+            # Cerrar el ciclo (finalizado/cancelado) deja sin postulaciones a
+            # las vacantes abiertas: misma regla que services.cambiar_estado.
+            if cambio_a_cerrado:
+                cerrar_vacantes_abiertas(proyecto)
         return proyecto
 
 

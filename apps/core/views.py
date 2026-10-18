@@ -2,8 +2,10 @@ from django.contrib.auth.decorators import login_not_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
 from django.db import OperationalError, connection
-from django.db.models import Prefetch
+from django.db.models import Case, IntegerField, Prefetch, Q, Value, When
+from django.http import JsonResponse
 from django.shortcuts import render
+from django.urls import reverse
 from django.views import View
 
 from apps.accounts.models import Habilidad, Perfil, Tecnologia
@@ -105,6 +107,48 @@ def _ids_validos(parametros, nombre):
     return [int(valor) for valor in parametros.getlist(nombre) if valor.isdigit()]
 
 
+def _q_busqueda(texto):
+    """Q de búsqueda de proyectos: nombre, descripción y requisitos de vacantes
+    activas (técnicas / habilidades). Se combina con AND con el resto de filtros."""
+    return (
+        Q(nombre__icontains=texto)
+        | Q(descripcion__icontains=texto)
+        | Q(
+            vacantes__es_activo=True,
+            vacantes__vacantetecnologiarequerida__tecnologia__nombre__icontains=texto,
+        )
+        | Q(
+            vacantes__es_activo=True,
+            vacantes__vacantehabilidadrequerida__habilidad__nombre__icontains=texto,
+        )
+    )
+
+
+def _orden_por_relevancia(proyectos, texto):
+    """Ordena resultados de `?q=` por relevancia, de más a menos específico:
+
+    0. el nombre coincide exactamente con el término
+    1. el nombre empieza con el término   (`DevMatch` antes que `Portal Dev`)
+    2. el nombre contiene el término
+    3. la descripción contiene el término
+    4. solo un requisito (tecnología/habilidad) de una vacante activa coincide
+
+    El desempate conserva el orden del feed (más reciente primero). Así, al
+    buscar "dev", un proyecto llamado "DevMatch" gana a uno que solo lo
+    menciona en su descripción o stack.
+    """
+    return proyectos.annotate(
+        _relevancia=Case(
+            When(nombre__iexact=texto, then=Value(0)),
+            When(nombre__istartswith=texto, then=Value(1)),
+            When(nombre__icontains=texto, then=Value(2)),
+            When(descripcion__icontains=texto, then=Value(3)),
+            default=Value(4),
+            output_field=IntegerField(),
+        )
+    ).order_by("_relevancia", "-actualizado_en", "-pk")
+
+
 def _iniciales(nombre):
     """Monograma del proyecto (hasta 2 letras) para la miniatura sin logo."""
     palabras = [palabra for palabra in nombre.replace("–", " ").replace("—", " ").split()]
@@ -163,6 +207,7 @@ class FeedView(LoginRequiredMixin, View):
     """Home interno (post-login): feed de proyectos + paginación + filtros GET.
 
     Filtros (todos opcionales, combinados con AND):
+      ?q=texto                        nombre, descripción o requisitos (tec/hab) de vacantes activas
       ?habilidad=ID&tecnologia=ID     multi-selección sobre requisitos de vacantes activas
       ?nivel=principiante|intermedio|avanzado      sobre el perfil del creador
       ?experiencia=N                  mínimo de años de experiencia del creador
@@ -217,6 +262,10 @@ class FeedView(LoginRequiredMixin, View):
                 creador__perfil__experiencia_anios__gte=int(experiencia)
             )
 
+        q = request.GET.get("q", "").strip()
+        if q:
+            proyectos = _orden_por_relevancia(proyectos.filter(_q_busqueda(q)), q)
+
         proyectos = proyectos.distinct()
 
         paginator = Paginator(proyectos, self.proyectos_por_pagina)
@@ -237,12 +286,27 @@ class FeedView(LoginRequiredMixin, View):
         query = request.GET.copy()
         query.pop("pagina", None)
 
+        # Filtros conservados al quitar el término de búsqueda (banner "…").
+        query_sin_q = query.copy()
+        query_sin_q.pop("q", None)
+
         context = {
             "page_obj": page_obj,
             "proyectos": page_obj.object_list,
             "is_paginated": paginator.num_pages > 1,
             "page_numbers": page_numbers,
             "query_sin_pagina": query.urlencode(),
+            # Filtros (sin `q`) para el enlace "Quitar búsqueda" del banner.
+            "query_sin_q": query_sin_q.urlencode(),
+            # Parámetros de filtro (sin `pagina` ni `q`) que la barra de búsqueda
+            # de la topbar conserva al enviar el término (pares nombre/valor,
+            # repetidos para los multiselect).
+            "query_items_busqueda": [
+                (nombre, valor)
+                for nombre, valores in query.lists()
+                for valor in valores
+                if nombre != "q"
+            ],
             # Opciones y estado de los filtros (los consume _filters_panel.html).
             "habilidades_catalogo": Habilidad.objects.filter(
                 es_activo=True
@@ -264,6 +328,56 @@ class FeedView(LoginRequiredMixin, View):
                 "experiencia": experiencia,
                 "estado_vacante": estado_vacante,
                 "estado": estado,
+                "q": q,
             },
         }
         return render(request, self.template_name, context)
+
+
+class BuscarProyectosView(LoginRequiredMixin, View):
+    """Autocompletado de la barra de búsqueda (JSON).
+
+    Devuelve hasta `max_resultados` proyectos visibles (mismo criterio que el
+    feed: activos y sin borrador/cancelado) cuyo nombre, descripción o
+    requisitos (tecnologías/habilidades de vacantes activas) contengan `q`.
+    Con menos de `min_caracteres` responde vacío para no golpear la BD en cada
+    tecla. Endpoint de solo lectura para JS (XHR/fetch del shell interno).
+    """
+
+    max_resultados = 6
+    min_caracteres = 2
+
+    def get(self, request):
+        q = request.GET.get("q", "").strip()
+        resultados = []
+
+        if len(q) >= self.min_caracteres:
+            proyectos = _orden_por_relevancia(
+                Proyecto.objects.filter(es_activo=True)
+                .exclude(estado__in=ESTADOS_OCULTOS)
+                .filter(_q_busqueda(q))
+                .select_related("creador")
+                .prefetch_related(LOGOS_PROYECTO)
+                .distinct(),
+                q,
+            )[: self.max_resultados]
+
+            for proyecto in proyectos:
+                logos = getattr(proyecto, "_logos", [])
+                logo = next(
+                    (item.archivo_url for item in logos if item.archivo_url), None
+                ) or proyecto.logo_url
+                resultados.append(
+                    {
+                        "id": proyecto.pk,
+                        "nombre": proyecto.nombre,
+                        "url": reverse(
+                            "projects:project_detail", kwargs={"pk": proyecto.pk}
+                        ),
+                        "logo": logo,
+                        "iniciales": _iniciales(proyecto.nombre),
+                        "estado": proyecto.get_estado_display(),
+                    }
+                )
+
+        return JsonResponse({"resultados": resultados})

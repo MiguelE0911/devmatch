@@ -7,6 +7,20 @@
 <div class="relative min-h-[60vh]">
     {% include "core/_filters_panel.html" %}
 
+    {% if filtros.q %}
+    <div class="mb-6 flex flex-wrap items-center gap-2 rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm text-slate-700">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4 shrink-0 text-violet-700">
+            <circle cx="11" cy="11" r="7" stroke-linecap="round"/>
+            <path d="m20 20-3.5-3.5" stroke-linecap="round"/>
+        </svg>
+        <span>Mostrando resultados de <span class="font-bold text-slate-900">«{{ filtros.q }}»</span></span>
+        <a href="{% url 'core:feed' %}{% if query_sin_q %}?{{ query_sin_q }}{% endif %}"
+           class="ml-auto inline-flex items-center gap-1 font-semibold text-violet-700 transition-colors hover:text-violet-900">
+            Quitar búsqueda
+        </a>
+    </div>
+    {% endif %}
+
     {% if proyectos %}
         <div class="space-y-6">
             {% for proyecto in proyectos %}
@@ -22,8 +36,13 @@
                     <path d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z"/>
                 </svg>
             </div>
+            {% if filtros.q %}
+            <h2 class="mt-4 text-lg font-bold text-slate-900">Sin resultados para «{{ filtros.q }}»</h2>
+            <p class="mt-1 text-sm text-slate-500">Probá con otro término o quitá la búsqueda para ver todos los proyectos.</p>
+            {% else %}
             <h2 class="mt-4 text-lg font-bold text-slate-900">Todavía no hay proyectos que mostrar</h2>
             <p class="mt-1 text-sm text-slate-500">Cuando el equipo publique nuevos proyectos, aparecerán aquí.</p>
+            {% endif %}
         </div>
     {% endif %}
 </div>
