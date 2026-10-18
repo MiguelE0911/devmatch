@@ -20,6 +20,7 @@ from .models import Proyecto, ProyectoMedia, Vacante
 from .services import (
     ESTADOS_CERRADOS,
     TRANSICIONES_VALIDAS,
+    VacanteInvalida,
     puede_agregar_imagenes,
     puede_agregar_vacantes,
 )
@@ -320,7 +321,13 @@ class VacancyCreateView(LoginRequiredMixin, CreateView):
             )
         form.instance.proyecto = self.proyecto
         form.instance.es_activo = True
-        return super().form_valid(form)
+        try:
+            return super().form_valid(form)
+        except VacanteInvalida as exc:
+            # Regla de negocio del servicio (p. ej. proyecto finalizado o
+            # cancelado): se muestra como error del formulario.
+            form.add_error(None, str(exc))
+            return self.form_invalid(form)
 
     def get_success_url(self):
         # El modelo Proyecto (Squad A) no define get_absolute_url; armamos la
@@ -380,10 +387,15 @@ class VacancyUpdateView(LoginRequiredMixin, UpdateView):
         return ctx
 
     def form_valid(self, form):
+        try:
+            response = super().form_valid(form)
+        except VacanteInvalida as exc:
+            form.add_error(None, str(exc))
+            return self.form_invalid(form)
         messages.success(
             self.request, "Vacante actualizada correctamente."
         )
-        return super().form_valid(form)
+        return response
 
     def get_success_url(self):
         return (

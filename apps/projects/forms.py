@@ -3,17 +3,13 @@ from django.utils import timezone
 
 from apps.accounts.models import Habilidad, Tecnologia
 
-from .models import (
-    Proyecto,
-    ProyectoMedia,
-    Vacante,
-    VacanteHabilidadRequerida,
-    VacanteTecnologiaRequerida,
-)
+from .models import Proyecto, ProyectoMedia, Vacante
 from .services import (
     ESTADOS_CERRADOS,
     TRANSICIONES_VALIDAS,
+    actualizar_vacante,
     cerrar_vacantes_abiertas,
+    crear_vacante,
 )
 
 
@@ -248,8 +244,9 @@ class VacanteForm(forms.ModelForm):
 
     `habilidades` y `tecnologias` no son columnas de `vacantes` sino tablas
     puente (vacante_habilidades_requeridas / vacante_tecnologias_requeridas);
-    se declaran como ModelMultipleChoiceField y `save()` sincroniza las filas
-    puente (Etapa 1: alta. Edición futura reutiliza el mismo sync).
+    se declaran como ModelMultipleChoiceField; `save()` delega en
+    services.crear_vacante / actualizar_vacante, que sincronizan las filas
+    puente dentro de una transacción.
 
     `estado` NO es un campo del alta: toda vacante nace 'abierta' (los estados
     'cubierta'/'cancelada' los mantienen los triggers/una edición posterior,
@@ -356,23 +353,21 @@ class VacanteForm(forms.ModelForm):
         # los triggers o la edición posterior (ver DevMatch-BD 6.2).
         if not self.instance.pk:
             vacante.estado = Vacante.ESTADO_ABIERTA
-        if commit:
-            vacante.save()
-            ids_habilidades = {h.pk for h in self.cleaned_data["habilidades"]}
-            for bridge in vacante.vacantehabilidadrequerida_set.all():
-                if bridge.habilidad_id not in ids_habilidades:
-                    bridge.delete()
-            for habilidad in self.cleaned_data["habilidades"]:
-                VacanteHabilidadRequerida.objects.get_or_create(
-                    vacante=vacante, habilidad=habilidad
-                )
+        if not commit:
+            return vacante
 
-            ids_tecnologias = {t.pk for t in self.cleaned_data["tecnologias"]}
-            for bridge in vacante.vacantetecnologiarequerida_set.all():
-                if bridge.tecnologia_id not in ids_tecnologias:
-                    bridge.delete()
-            for tecnologia in self.cleaned_data["tecnologias"]:
-                VacanteTecnologiaRequerida.objects.get_or_create(
-                    vacante=vacante, tecnologia=tecnologia
-                )
-        return vacante
+        # Con commit=True las reglas de negocio y la sincronización de
+        # requisitos viven en services.py, dentro de transaction.atomic().
+        # Pueden levantar VacanteInvalida: la vista la captura y la muestra.
+        datos = {
+            "titulo": vacante.titulo,
+            "descripcion": vacante.descripcion,
+            "cupos_totales": vacante.cupos_totales,
+            "habilidades": self.cleaned_data["habilidades"],
+            "tecnologias": self.cleaned_data["tecnologias"],
+        }
+        if self.instance.pk:
+            return actualizar_vacante(
+                self.instance, estado=self.cleaned_data.get("estado"), **datos
+            )
+        return crear_vacante(self.instance.proyecto, **datos)
