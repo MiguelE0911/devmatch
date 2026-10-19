@@ -99,7 +99,8 @@ devmatch/
 │   ├── src/input.css            # entrada de Tailwind
 │   ├── dist/output.css          # build de Tailwind
 │   └── img/
-└── media/                        # logos y prototipos subidos (Pillow)
+└── media/                        # logos y prototipos procesados con Pillow (fallback local;
+                                  # con las 5 vars de Neon Object Storage, van al bucket del equipo)
 ```
 
 > **Nota:** Estructura de referencia. Es probable que no se implemente completa desde la primera etapa; las apps marcadas como [ESQUELETO] se completan en su etapa correspondiente.

@@ -11,8 +11,10 @@ su submenú que se abre a la IZQUIERDA del panel:
   · habilidad/tecnologia    multiselect-search  (búsqueda + lista + chips)
   · experiencia             stepper (input numérico ~140px con ▲/▼)
   · nivel/estado_vacante/estado   single-select-list (fila activa = bold)
-Todo es un <form method="get"> que se auto-aplica al cambiar (sin botón);
-el estado servido viene de los query params + el context `filtros`.
+Todo es un <form method="get"> que NO se auto-aplica: los cambios quedan en
+memoria dentro del panel y se confirman con el botón "Aplicar filtros" del pie
+(o se descartan con "Limpiar"). El estado servido viene de los query params +
+el context `filtros`.
 {% endcomment %}
 <aside id="panel-filtros" data-panel-filtros tabindex="-1"
        class="fixed right-4 top-16 z-40 hidden w-[350px] max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-200 bg-white shadow-lg">
@@ -21,6 +23,9 @@ el estado servido viene de los query params + el context `filtros`.
     </div>
 
     <form id="form-filtros" method="get" action="{% url 'core:feed' %}" class="py-1">
+
+        {% comment %}Conserva el término de la barra de búsqueda al filtrar.{% endcomment %}
+        <input type="hidden" name="q" value="{{ filtros.q }}">
 
         {% comment %}
         ── HABILIDADES ──  multiselect-search
@@ -39,7 +44,7 @@ el estado servido viene de los query params + el context `filtros`.
                 <span class="text-sm font-bold text-slate-900">Habilidades</span>
             </button>
 
-            <div data-submenu hidden class="absolute right-full top-0 z-30 mr-2 w-[320px] rounded-2xl border border-slate-200 bg-white p-3 shadow-lg">
+            <div data-submenu data-param="habilidad" class="hidden absolute right-full top-0 z-30 mr-2 w-[320px] rounded-2xl border border-slate-200 bg-white p-3 shadow-lg">
                 <input type="search" data-busqueda placeholder="Buscar habilidad…"
                        class="w-full rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100">
                 <ul data-lista class="mt-2 max-h-56 space-y-0.5 overflow-y-auto">
@@ -99,7 +104,7 @@ el estado servido viene de los query params + el context `filtros`.
                 <span class="text-sm font-bold text-slate-900">Tecnologías</span>
             </button>
 
-            <div data-submenu hidden class="absolute right-full top-0 z-30 mr-2 w-[320px] rounded-2xl border border-slate-200 bg-white p-3 shadow-lg">
+            <div data-submenu data-param="tecnologia" class="hidden absolute right-full top-0 z-30 mr-2 w-[320px] rounded-2xl border border-slate-200 bg-white p-3 shadow-lg">
                 <input type="search" data-busqueda placeholder="Buscar tecnología…"
                        class="w-full rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100">
                 <ul data-lista class="mt-2 max-h-56 space-y-0.5 overflow-y-auto">
@@ -163,7 +168,7 @@ el estado servido viene de los query params + el context `filtros`.
                 <span class="text-sm font-bold text-slate-900">Nivel</span>
             </button>
 
-            <div data-submenu hidden class="absolute right-full top-0 z-30 mr-2 w-[220px] rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
+            <div data-submenu class="hidden absolute right-full top-0 z-30 mr-2 w-[220px] rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
                 <input type="hidden" name="nivel" value="{{ filtros.nivel|default:'' }}">
                 <ul class="space-y-0.5">
                     <li>
@@ -203,7 +208,7 @@ el estado servido viene de los query params + el context `filtros`.
                 <span class="text-sm font-bold text-slate-900">Experiencia</span>
             </button>
 
-            <div data-submenu hidden class="absolute right-full top-0 z-30 mr-2 w-[260px] rounded-2xl border border-slate-200 bg-white p-4 shadow-lg">
+            <div data-submenu class="hidden absolute right-full top-0 z-30 mr-2 w-[260px] rounded-2xl border border-slate-200 bg-white p-4 shadow-lg">
                 <div class="flex items-center justify-between gap-3">
                     <span class="text-sm text-slate-500">Mínimo de años</span>
                     <div class="flex h-11 w-[140px] items-center justify-between rounded-full border border-slate-200 bg-white py-1 pl-1 pr-1">
@@ -250,7 +255,7 @@ el estado servido viene de los query params + el context `filtros`.
                 <span class="text-sm font-bold text-slate-900">Estado de vacante</span>
             </button>
 
-            <div data-submenu hidden class="absolute right-full top-0 z-30 mr-2 w-[220px] rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
+            <div data-submenu class="hidden absolute right-full top-0 z-30 mr-2 w-[220px] rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
                 <input type="hidden" name="estado_vacante" value="{{ filtros.estado_vacante|default:'' }}">
                 <ul class="space-y-0.5">
                     <li>
@@ -294,7 +299,7 @@ el estado servido viene de los query params + el context `filtros`.
                 <span class="text-sm font-bold text-slate-900">Estado del proyecto</span>
             </button>
 
-            <div data-submenu hidden class="absolute right-full top-0 z-30 mr-2 w-[240px] rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
+            <div data-submenu class="hidden absolute right-full top-0 z-30 mr-2 w-[240px] rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
                 <input type="hidden" name="estado" value="{{ filtros.estado|default:'' }}">
                 <ul class="space-y-0.5">
                     <li>
@@ -315,6 +320,23 @@ el estado servido viene de los query params + el context `filtros`.
                     {% endfor %}
                 </ul>
             </div>
+        </div>
+
+        {% comment %}
+        ── Pie de acciones ──  los cambios NO se aplican solos al configurar.
+        "Limpiar" devuelve el panel a su estado por defecto SIN recargar (para
+        elegir otros filtros antes de aplicar); "Aplicar filtros" recién
+        actualiza la página.
+        {% endcomment %}
+        <div class="flex items-center gap-2 border-t border-slate-100 px-5 py-4">
+            <button type="button" data-limpiar-filtros
+                    class="rounded-full border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50">
+                Limpiar
+            </button>
+            <button type="submit"
+                    class="flex-1 rounded-full bg-violet-700 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-violet-800">
+                Aplicar filtros
+            </button>
         </div>
 
     </form>

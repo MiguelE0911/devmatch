@@ -29,6 +29,11 @@ class Command(BaseCommand):
     ignoran el valor que se pasa a create(), así que se corrigen SIEMPRE con
     un UPDATE posterior al get_or_create, tanto si la fila es nueva como si ya
     existía. Cada corrida vuelve a fijar los mismos desfases relativos.
+
+    TODO: revisar las vacantes que este seed crea en proyectos
+    finalizado/cancelado. Desde que el alta de vacantes se bloquea en
+    proyectos cerrados, esas filas quedan en un estado que la interfaz ya no
+    permite reproducir (siguen visibles como datos inconsistentes).
     """
 
     help = "Genera datos de prueba (fixtures) para Squad B."

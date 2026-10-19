@@ -1,7 +1,8 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from apps.accounts.forms import LoginForm, RegistroForm
+from apps.accounts.forms import LoginForm, ProfileEditForm, RegistroForm
+from apps.accounts.models import Perfil
 
 Usuario = get_user_model()
 
@@ -97,6 +98,52 @@ class RegistroFormTests(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn("password2", form.errors)
 
+    def test_username_demasiado_largo(self):
+        form = RegistroForm(data=valid_data(username="a" * 31))
+        self.assertFalse(form.is_valid())
+        self.assertIn("username", form.errors)
+
+    def test_email_limita_longitud_en_el_widget(self):
+        # maxlength en el HTML: el navegador frena el tipeo pasado el límite.
+        rendered = str(RegistroForm()["email"])
+        self.assertIn('maxlength="254"', rendered)
+
+    def test_email_demasiado_largo_invalido(self):
+        form = RegistroForm(data=valid_data(email=("a" * 250) + "@x.com"))
+        self.assertFalse(form.is_valid())
+        self.assertIn("email", form.errors)
+
+    def test_nombre_con_numeros_rechazado(self):
+        form = RegistroForm(data=valid_data(first_name="Ana123"))
+        self.assertFalse(form.is_valid())
+        self.assertIn("first_name", form.errors)
+
+    def test_apellido_con_simbolos_rechazado(self):
+        form = RegistroForm(data=valid_data(last_name="Ríos@!"))
+        self.assertFalse(form.is_valid())
+        self.assertIn("last_name", form.errors)
+
+    def test_nombre_con_emoji_rechazado(self):
+        form = RegistroForm(data=valid_data(first_name="Ana 👩‍💻"))
+        self.assertFalse(form.is_valid())
+        self.assertIn("first_name", form.errors)
+
+    def test_nombres_con_acentos_ñ_espacios_guiones_y_apostrofos_validos(self):
+        form = RegistroForm(
+            data=valid_data(first_name="Ana-María", last_name="O'Connor Ñandú")
+        )
+        self.assertTrue(form.is_valid(), form.errors.as_text())
+
+    def test_nombre_demasiado_largo(self):
+        form = RegistroForm(data=valid_data(first_name="A" * 51))
+        self.assertFalse(form.is_valid())
+        self.assertIn("first_name", form.errors)
+
+    def test_apellido_demasiado_largo(self):
+        form = RegistroForm(data=valid_data(last_name="B" * 51))
+        self.assertFalse(form.is_valid())
+        self.assertIn("last_name", form.errors)
+
 
 class LoginFormTests(TestCase):
     def test_autentica_por_email(self):
@@ -163,3 +210,58 @@ class LoginFormTests(TestCase):
         # No debe filtrar el estado de la cuenta: mismo mensaje genérico.
         self.assertIn(ERROR := "Correo electrónico o contraseña incorrectos.", form.errors["__all__"])
         self.assertEqual(len(form.errors["__all__"]), 1)
+
+
+class ProfileEditFormTests(TestCase):
+    """Los límites de username/nombre/apellido también aplican al editar
+    el perfil (mismos validators que RegistroForm)."""
+
+    def setUp(self):
+        self.usuario = Usuario.objects.create_user(
+            "perfil@devmatch.test", "perfil_user", password="Clave-Segura-99!"
+        )
+        self.perfil = Perfil.objects.get_or_create(usuario=self.usuario)[0]
+
+    def _datos(self, **overrides):
+        data = {
+            "username": "perfil_user",
+            "first_name": "Ana",
+            "last_name": "Ríos",
+            "email": "perfil@devmatch.test",
+            "nivel": "intermedio",
+            "experiencia_anios": 2,
+            "disponibilidad_horas_semana": 10,
+            "bio": "",
+        }
+        data.update(overrides)
+        return data
+
+    def test_datos_validos_pasan(self):
+        form = ProfileEditForm(instance=self.perfil, data=self._datos())
+        self.assertTrue(form.is_valid(), form.errors.as_text())
+
+    def test_nombres_vacios_siguen_permitidos(self):
+        form = ProfileEditForm(
+            instance=self.perfil, data=self._datos(first_name="", last_name="")
+        )
+        self.assertTrue(form.is_valid(), form.errors.as_text())
+
+    def test_nombre_con_numeros_rechazado(self):
+        form = ProfileEditForm(instance=self.perfil, data=self._datos(first_name="Ana2"))
+        self.assertFalse(form.is_valid())
+        self.assertIn("first_name", form.errors)
+
+    def test_apellido_con_emoji_rechazado(self):
+        form = ProfileEditForm(instance=self.perfil, data=self._datos(last_name="Ríos🚀"))
+        self.assertFalse(form.is_valid())
+        self.assertIn("last_name", form.errors)
+
+    def test_username_demasiado_largo_rechazado(self):
+        form = ProfileEditForm(instance=self.perfil, data=self._datos(username="u" * 31))
+        self.assertFalse(form.is_valid())
+        self.assertIn("username", form.errors)
+
+    def test_nombre_demasiado_largo_rechazado(self):
+        form = ProfileEditForm(instance=self.perfil, data=self._datos(first_name="A" * 51))
+        self.assertFalse(form.is_valid())
+        self.assertIn("first_name", form.errors)

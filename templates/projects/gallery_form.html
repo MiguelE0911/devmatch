@@ -7,22 +7,34 @@
     <div class="min-w-0 space-y-5">
         {% include "projects/_proyecto_encabezado.html" with con_descripcion=False %}
 
+        {% if puede_agregar_imagenes %}
         <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 class="text-lg font-bold text-slate-900">Editar galería</h2>
             <p class="mt-1 text-sm text-slate-500">
-                Carga capturas del prototipo pegando su URL. Ajusta el orden con las flechas y elimina las que ya no quieras.
+                Sube capturas del prototipo desde tu equipo (JPG, PNG, WEBP o GIF) o pega su URL. Ajusta el orden con las flechas y elimina las que ya no quieras.
             </p>
 
-            <form method="post" class="mt-6 space-y-6">
+            <form method="post" enctype="multipart/form-data" class="mt-6 space-y-6">
                 {% csrf_token %}
                 {{ form.non_field_errors }}
+
+                <div>
+                    <label for="{{ form.archivo.id_for_label }}" class="mb-1.5 block text-sm font-semibold text-slate-800">
+                        {{ form.archivo.label }}
+                    </label>
+                    <p class="mb-2 text-xs leading-relaxed text-slate-500">
+                        JPG, PNG, WEBP o GIF, hasta 5 MB. La imagen se comprime y redimensiona al subirla.
+                    </p>
+                    {{ form.archivo }}
+                    {{ form.archivo.errors }}
+                </div>
 
                 <div>
                     <label for="{{ form.archivo_url.id_for_label }}" class="mb-1.5 block text-sm font-semibold text-slate-800">
                         {{ form.archivo_url.label }}
                     </label>
                     <p class="mb-2 text-xs leading-relaxed text-slate-500">
-                        Dirección pública de la imagen (https://... o /media/...).
+                        o pega el enlace directo (https://... o /media/...). Dejalo vacío si subiste un archivo.
                     </p>
                     {{ form.archivo_url }}
                     {{ form.archivo_url.errors }}
@@ -54,6 +66,15 @@
                 </div>
             </form>
         </div>
+        {% else %}
+        <div class="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="mt-0.5 h-4 w-4 shrink-0">
+                <path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003ZM12 8.25a.75.75 0 0 1 .75.75v3.75a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z" clip-rule="evenodd"/>
+            </svg>
+            <span>No se pueden añadir imágenes a un proyecto en estado
+                <span class="font-semibold">«{{ proyecto.get_estado_display }}»</span>.</span>
+        </div>
+        {% endif %}
 
         <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 class="text-lg font-bold text-slate-900">Imágenes del proyecto</h2>
@@ -119,7 +140,11 @@
             {% else %}
                 <div class="mt-4 flex aspect-video w-full items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50">
                     <p class="text-sm font-medium text-slate-400">
-                        Aún no hay capturas cargadas. Sube la primera arriba.
+                        {% if puede_agregar_imagenes %}
+                            Aún no hay capturas cargadas. Sube la primera arriba.
+                        {% else %}
+                            Aún no hay capturas cargadas en este proyecto.
+                        {% endif %}
                     </p>
                 </div>
             {% endif %}

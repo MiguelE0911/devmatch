@@ -1,20 +1,30 @@
 {% comment %}
-Input de autenticación reutilizable (Login/Registro).
-Recibe: field (BoundField).
-La label va oculta (sr-only, accesible): el placeholder es el único
-indicador visual, según la spec de auth. El estilo del input vive en
-INPUT_CLASSES (apps/accounts/forms.py), no acá.
+Input de autenticación reutilizable (Login/Registro) con "floating label":
+la etiqueta vive DENTRO de la caja; al enfocar o escribir sube arriba y se
+achica con una animación, y al vaciar el campo vuelve a su lugar y tamaño.
+Se hace 100% con CSS (variantes peer-* de Tailwind), sin JS.
 
-Los campos de contraseña incluyen un botón de "ver mientras se mantiene
-presionado" (script global en accounts/_auth_base.html). El widget de
-password ya trae pr-14 para no pisar el botón.
+El placeholder del widget es un espacio (" ", ver apps/accounts/forms.py)
+para que :placeholder-shown indique el estado vacío. Recibe: field
+(BoundField). El estilo base del input también vive en forms.py
+(INPUT_CLASSES), no acá.
+
+Los campos de contraseña incluyen el botón "ver mientras se mantiene
+presionado" (script global en accounts/_auth_base.html). El widget ya trae
+pr-14 para no pisar el botón.
 {% endcomment %}
 <div>
-    <label for="{{ field.id_for_label }}" class="sr-only">{{ field.label }}</label>
+    <div class="relative">
+        {{ field }}
 
-    {% if field.field.widget.input_type == "password" %}
-        <div class="relative">
-            {{ field }}
+        <label for="{{ field.id_for_label }}"
+               class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-[#959595] transition-all duration-200
+                      peer-focus:top-1.5 peer-focus:translate-y-0 peer-focus:text-xs peer-focus:text-violet-700
+                      peer-[:not(:placeholder-shown)]:top-1.5 peer-[:not(:placeholder-shown)]:translate-y-0 peer-[:not(:placeholder-shown)]:text-xs">
+            {{ field.label }}
+        </label>
+
+        {% if field.field.widget.input_type == "password" %}
             <button type="button"
                     data-toggle-password
                     data-target="{{ field.id_for_label }}"
@@ -32,10 +42,8 @@ password ya trae pr-14 para no pisar el botón.
                     <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
                 </svg>
             </button>
-        </div>
-    {% else %}
-        {{ field }}
-    {% endif %}
+        {% endif %}
+    </div>
 
     {% if field.help_text %}
         <p class="mt-1.5 text-xs leading-relaxed text-slate-500">{{ field.help_text }}</p>

@@ -32,6 +32,12 @@ class TransicionEstadoInvalida(Exception):
     """Se intentó pasar un proyecto de un estado a otro no permitido."""
 
 
+# Un proyecto en un estado "cerrado" ya no recluta: sus vacantes abiertas no
+# deben seguir recibiendo postulaciones (regla de negocio, no hay trigger que
+# la aplique — ver `cerrar_vacantes_abiertas`).
+ESTADOS_CERRADOS = {Proyecto.ESTADO_FINALIZADO, Proyecto.ESTADO_CANCELADO}
+
+
 TRANSICIONES_VALIDAS = {
     Proyecto.ESTADO_BORRADOR: {Proyecto.ESTADO_PUBLICADO, Proyecto.ESTADO_CANCELADO},
     Proyecto.ESTADO_PUBLICADO: {Proyecto.ESTADO_RECLUTANDO, Proyecto.ESTADO_CANCELADO},
@@ -51,6 +57,26 @@ TRANSICIONES_VALIDAS = {
     Proyecto.ESTADO_FINALIZADO: set(),
     Proyecto.ESTADO_CANCELADO: set(),
 }
+
+
+def puede_agregar_vacantes(proyecto: Proyecto) -> bool:
+    """¿Se pueden agregar vacantes nuevas a `proyecto` según su estado?
+
+    Permitidos: 'borrador', 'publicado', 'reclutando', 'equipo_completo' y
+    'en_desarrollo'. Bloqueados: 'finalizado' y 'cancelado' — un proyecto
+    cerrado ya no recluta, así que no debe admitir vacantes nuevas. Coincide
+    con la regla de postulaciones (mismos ESTADOS_CERRADOS).
+    """
+    return proyecto.estado not in ESTADOS_CERRADOS
+
+
+def puede_agregar_imagenes(proyecto):
+    """Permite agregar imágenes solo si el proyecto NO está cancelado.
+
+    Regla: un proyecto finalizado puede seguir subiendo imágenes de prototipos;
+    un proyecto cancelado NO puede agregar nuevas imágenes.
+    """
+    return proyecto.estado != Proyecto.ESTADO_CANCELADO
 
 
 def cambiar_estado(proyecto: Proyecto, nuevo_estado: str) -> Proyecto:
@@ -76,7 +102,22 @@ def cambiar_estado(proyecto: Proyecto, nuevo_estado: str) -> Proyecto:
     elif nuevo_estado == Proyecto.ESTADO_CANCELADO:
         proyecto.cancelado_en = timezone.now()
     proyecto.save()
+    if nuevo_estado in ESTADOS_CERRADOS:
+        cerrar_vacantes_abiertas(proyecto)
     return proyecto
+
+
+def cerrar_vacantes_abiertas(proyecto: Proyecto) -> int:
+    """Marca 'cancelada' las vacantes abiertas de un proyecto ya cerrado.
+
+    Sin esto, un proyecto finalizado seguiría mostrando vacantes postulables
+    (el único estado que el trigger `fn_actualizar_cupos_vacante` revierte es
+    'abierta'/'cubierta'; 'cancelada' es terminal, así que se queda cerrada).
+    No toca 'cubierta' (ya no recibe postulaciones). Devuelve cuántas cerró.
+    """
+    return proyecto.vacantes.filter(estado=Vacante.ESTADO_ABIERTA).update(
+        estado=Vacante.ESTADO_CANCELADA
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -99,9 +140,10 @@ class TransicionVacanteInvalida(VacanteInvalida):
     """Cambio manual de estado de la vacante no permitido."""
 
 
-ESTADOS_PROYECTO_SIN_VACANTES = frozenset(
-    {Proyecto.ESTADO_FINALIZADO, Proyecto.ESTADO_CANCELADO}
-)
+# Mismo criterio que ESTADOS_CERRADOS: un proyecto cerrado no admite vacantes
+# nuevas ni la reapertura de las canceladas. Se conserva el nombre propio para
+# dejar explícita la regla de vacantes.
+ESTADOS_PROYECTO_SIN_VACANTES = frozenset(ESTADOS_CERRADOS)
 
 # Transiciones que el usuario puede pedir a mano. 'cubierta' NO es un estado
 # de entrada manual: lo asigna el trigger fn_actualizar_cupos_vacante cuando

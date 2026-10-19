@@ -65,6 +65,14 @@ class FeedViewTests(TestCase):
                          "Estado de vacante", "Estado del proyecto"):
             self.assertContains(resp, etiqueta)
 
+    def test_boton_de_filtros_no_aparece_fuera_del_feed(self):
+        # El panel de filtros solo existe en el feed: en otras vistas el botón
+        # quedaría muerto, así que no se dibuja.
+        self._login()
+        resp = self.client.get(reverse("accounts:profile"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, "data-filters-toggle")
+
     # -- Visibilidad --------------------------------------------------------
 
     def test_feed_muestra_proyectos_visibles_y_oculta_borradores(self):
@@ -158,6 +166,16 @@ class FeedViewTests(TestCase):
         resp = self.client.get(reverse("core:feed"), {"pagina": "999"})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.context["page_obj"].number, 1)
+
+    def test_card_lleva_el_origen_al_detalle_para_volver(self):
+        for i in range(7):
+            self._crear_proyecto(f"Proyecto {i}")
+        self._login()
+        resp = self.client.get(reverse("core:feed"), {"pagina": "2"})
+        self.assertEqual(resp.status_code, 200)
+        # El enlace al detalle incluye la página actual para que "Volver"
+        # regrese al feed en la misma página (no a la primera).
+        self.assertContains(resp, "?next=/home/%3Fpagina%3D2")
 
     def test_card_usa_logo_real_cuando_existe(self):
         proyecto = self._crear_proyecto("Con Logo")
@@ -424,3 +442,157 @@ class FeedFilterViewTests(TestCase):
         resp = self.client.get(reverse("core:feed"), {"habilidad": "99999"})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(self._nombres(resp), [])
+
+
+class FeedSearchViewTests(TestCase):
+    """Búsqueda del feed (`?q=`): nombre, descripción y requisitos de vacantes
+    activas; combinable con filtros y conservada en la paginación."""
+
+    def setUp(self):
+        self.creador = Usuario.objects.create_user(
+            "creador-busqueda@devmatch.test", "creador-busqueda", password="Clave-123!"
+        )
+
+    def _login(self):
+        self.client.force_login(self.creador)
+
+    def _proyecto(self, nombre, descripcion=None, estado=Proyecto.ESTADO_RECLUTANDO, **extra):
+        return Proyecto.objects.create(
+            creador=self.creador,
+            nombre=nombre,
+            descripcion=descripcion or f"Descripción de {nombre}",
+            estado=estado,
+            **extra,
+        )
+
+    def _vacante(self, proyecto, **extra):
+        return Vacante.objects.create(
+            proyecto=proyecto, titulo="Vacante", descripcion="d",
+            cupos_totales=1, **extra,
+        )
+
+    def _nombres(self, resp):
+        return [p.nombre for p in resp.context["proyectos"]]
+
+    def test_busqueda_por_nombre(self):
+        self._proyecto("Marketplace")
+        self._proyecto("Otra Cosa")
+        self._login()
+        resp = self.client.get(reverse("core:feed"), {"q": "market"})
+        self.assertEqual(self._nombres(resp), ["Marketplace"])
+
+    def test_busqueda_por_descripcion(self):
+        self._proyecto("Proyecto X", descripcion="App para reservar canchas")
+        self._proyecto("Proyecto Y", descripcion="Red social de fotos")
+        self._login()
+        resp = self.client.get(reverse("core:feed"), {"q": "canchas"})
+        self.assertEqual(self._nombres(resp), ["Proyecto X"])
+
+    def test_busqueda_por_tecnologia_de_vacante_activa(self):
+        python = Tecnologia.objects.create(nombre="Python")
+        vacante = self._vacante(self._proyecto("Backend API"))
+        VacanteTecnologiaRequerida.objects.create(vacante=vacante, tecnologia=python)
+        self._proyecto("Solo Frontend")
+
+        self._login()
+        resp = self.client.get(reverse("core:feed"), {"q": "python"})
+        self.assertEqual(self._nombres(resp), ["Backend API"])
+
+    def test_busqueda_por_habilidad_de_vacante_activa(self):
+        liderazgo = Habilidad.objects.create(nombre="Liderazgo")
+        vacante = self._vacante(self._proyecto("Equipo"))
+        VacanteHabilidadRequerida.objects.create(vacante=vacante, habilidad=liderazgo)
+
+        self._login()
+        resp = self.client.get(reverse("core:feed"), {"q": "liderazgo"})
+        self.assertEqual(self._nombres(resp), ["Equipo"])
+
+    def test_busqueda_ignora_requisitos_de_vacantes_inactivas(self):
+        python = Tecnologia.objects.create(nombre="Python")
+        vacante = self._vacante(self._proyecto("Cerrado"), es_activo=False)
+        VacanteTecnologiaRequerida.objects.create(vacante=vacante, tecnologia=python)
+
+        self._login()
+        resp = self.client.get(reverse("core:feed"), {"q": "python"})
+        self.assertEqual(self._nombres(resp), [])
+
+    def test_busqueda_oculta_borradores_cancelados_y_desactivados(self):
+        self._proyecto("Marketplace Borrador", estado=Proyecto.ESTADO_BORRADOR)
+        self._proyecto("Marketplace Cancelado", estado=Proyecto.ESTADO_CANCELADO)
+        self._proyecto("Marketplace Borrado", es_activo=False)
+        self._proyecto("Marketplace Vivo")
+
+        self._login()
+        resp = self.client.get(reverse("core:feed"), {"q": "marketplace"})
+        self.assertEqual(self._nombres(resp), ["Marketplace Vivo"])
+
+    def test_busqueda_se_combina_con_filtros(self):
+        python = Tecnologia.objects.create(nombre="Python")
+        vacante = self._vacante(self._proyecto("API Python"))
+        VacanteTecnologiaRequerida.objects.create(vacante=vacante, tecnologia=python)
+        self._proyecto("API en Go")
+
+        self._login()
+        resp = self.client.get(
+            reverse("core:feed"), {"q": "api", "tecnologia": python.pk}
+        )
+        self.assertEqual(self._nombres(resp), ["API Python"])
+
+    def test_busqueda_se_conserva_en_la_paginacion(self):
+        for i in range(8):
+            self._proyecto(f"Marketplace {i:02d}")
+        self._proyecto("Otro")
+        self._login()
+
+        primera = self.client.get(reverse("core:feed"), {"q": "marketplace"})
+        self.assertEqual(primera.context["page_obj"].paginator.num_pages, 2)
+        self.assertIn("q=marketplace", primera.context["query_sin_pagina"])
+
+        segunda = self.client.get(
+            reverse("core:feed"), {"q": "marketplace", "pagina": "2"}
+        )
+        self.assertEqual(len(segunda.context["page_obj"].object_list), 2)
+
+    def test_barra_de_busqueda_preserva_filtros_y_refleja_el_termino(self):
+        python = Tecnologia.objects.create(nombre="Python")
+        vacante = self._vacante(self._proyecto("Con Python"))
+        VacanteTecnologiaRequerida.objects.create(vacante=vacante, tecnologia=python)
+
+        self._login()
+        resp = self.client.get(
+            reverse("core:feed"), {"q": "python", "tecnologia": python.pk}
+        )
+        self.assertEqual(resp.context["filtros"]["q"], "python")
+        self.assertEqual(resp.context["query_items_busqueda"], [("tecnologia", str(python.pk))])
+        self.assertContains(resp, f'name="tecnologia" value="{python.pk}"')
+
+    def test_banner_de_resultados_y_quitar_busqueda_conserva_filtros(self):
+        python = Tecnologia.objects.create(nombre="Python")
+        vacante = self._vacante(self._proyecto("Con Python"))
+        VacanteTecnologiaRequerida.objects.create(vacante=vacante, tecnologia=python)
+
+        self._login()
+        resp = self.client.get(
+            reverse("core:feed"), {"q": "python", "tecnologia": python.pk}
+        )
+        self.assertContains(resp, "Mostrando resultados de")
+        self.assertEqual(resp.context["query_sin_q"], f"tecnologia={python.pk}")
+
+    def test_estado_vacio_refleja_la_busqueda(self):
+        self._login()
+        resp = self.client.get(reverse("core:feed"), {"q": "no-existe"})
+        self.assertFalse(resp.context["proyectos"])
+        self.assertContains(resp, "Sin resultados para")
+        self.assertContains(resp, "no-existe")
+
+    def test_busqueda_ordena_por_relevancia(self):
+        self._proyecto("Portal Interno", descripcion="hecho con dev tools")
+        self._proyecto("Reactor Dev")
+        self._proyecto("DevMatch Clone")
+
+        self._login()
+        resp = self.client.get(reverse("core:feed"), {"q": "dev"})
+        self.assertEqual(
+            self._nombres(resp),
+            ["DevMatch Clone", "Reactor Dev", "Portal Interno"],
+        )

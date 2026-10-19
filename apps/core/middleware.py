@@ -1,7 +1,36 @@
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import SESSION_KEY, logout
+from django.http import HttpResponse
 from django.shortcuts import redirect
+
+
+LIMITE_POST_BYTES = 6 * 1024 * 1024  # archivo máximo (5 MB) + margen multipart
+
+
+class LimiteSubidasMiddleware:
+    """Rechaza POST cuyo cuerpo supere el límite de subida.
+
+    El tope de 2/5 MB por imagen recién se valida al procesar el archivo, ya
+    que Django spool-eó el multipart completo a disco temporal. Sin un tope
+    aguas arriba, cualquier usuario logueado podría llenar el disco con un
+    solo envío. `DATA_UPLOAD_MAX_MEMORY_SIZE` no aplica a partes de archivo,
+    así que se compara Content-Length aquí, antes de que la vista corra.
+    El límite es global y cómodo: la subida más grande permitida es 5 MB.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if request.method == "POST":
+            largo = int(request.META.get("CONTENT_LENGTH") or 0)
+            if largo > LIMITE_POST_BYTES:
+                return HttpResponse(
+                    "El archivo supera el tamaño máximo permitido (5 MB).",
+                    status=413,
+                )
+        return self.get_response(request)
 
 
 class AccountStateMiddleware:

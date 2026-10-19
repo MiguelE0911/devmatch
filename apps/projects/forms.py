@@ -4,7 +4,14 @@ from django.utils import timezone
 from apps.accounts.models import Habilidad, Tecnologia
 
 from .models import Proyecto, ProyectoMedia, Vacante
-from .services import TRANSICIONES_VALIDAS, actualizar_vacante, crear_vacante
+from .media_utils import guardar_imagen, procesar_imagen
+from .services import (
+    ESTADOS_CERRADOS,
+    TRANSICIONES_VALIDAS,
+    actualizar_vacante,
+    cerrar_vacantes_abiertas,
+    crear_vacante,
+)
 
 
 class InputClassesMixin:
@@ -14,6 +21,13 @@ class InputClassesMixin:
         "w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 "
         "text-sm text-slate-900 placeholder-slate-400 focus:border-violet-500 "
         "focus:outline-none focus:ring-2 focus:ring-violet-100"
+    )
+
+    archivo_cls = (
+        "block w-full text-sm text-slate-600 file:mr-3 file:cursor-pointer "
+        "file:rounded-full file:border-0 file:bg-violet-50 file:px-4 file:py-2 "
+        "file:text-xs file:font-semibold file:text-violet-800 "
+        "hover:file:bg-violet-100"
     )
 
 
@@ -27,8 +41,19 @@ class ProyectoForm(InputClassesMixin, forms.ModelForm):
     para no depender del error crudo de Postgres; el trigger sigue siendo la
     garantía final. Al finalizar o cancelar se registran `finalizado_en` /
     `cancelado_en`, igual que hacen el servicio y el trigger.
-    `logo_url` y la galería viven en `proyecto_media`/`logo_url` (TEXT).
+    `logo_url` guarda la ruta relativa (/media/...) del archivo subido con
+    Pillow o una URL externa pegada; `logo` (archivo) tiene prioridad y en
+    `save()` escribe el resultado en `logo_url`. La galería vive en
+    `proyecto_media` (tabla con columna TEXT `archivo_url`).
     """
+
+    logo = forms.ImageField(
+        label="Subir logo",
+        required=False,
+        widget=forms.ClearableFileInput(
+            attrs={"class": InputClassesMixin.archivo_cls}
+        ),
+    )
 
     class Meta:
         model = Proyecto
@@ -105,47 +130,66 @@ class ProyectoForm(InputClassesMixin, forms.ModelForm):
         return nuevo_estado
 
     def clean_logo(self):
-        """
-        Funciones preparadas para Etapa 3 (archivos físicos). No se ejecuta
-        hasta que exista un campo 'logo' (ImageField) real en el form.
+        """Valida y procesa el logo subido con Pillow (media_utils): peso,
+        formato real y normalización. El ContentFile procesado queda en
+        `cleaned_data["logo_procesado"]` y `save()` lo guarda en MEDIA_ROOT,
+        escribiendo la URL resultante en `logo_url`.
         """
         logo = self.cleaned_data.get("logo")
-        if logo and hasattr(logo, 'size'):
-            limite_mb = 2
-            if logo.size > limite_mb * 1024 * 1024:
-                raise forms.ValidationError(f"El logo no puede pesar más de {limite_mb} MB.")
-            
-            tipos_permitidos = ['image/jpeg', 'image/png', 'image/webp']
-            if getattr(logo, 'content_type', '') not in tipos_permitidos:
-                raise forms.ValidationError("Formato no soportado. Usa JPG, PNG o WEBP.")
+        if logo:
+            self.cleaned_data["logo_procesado"] = procesar_imagen(logo, "logo")
         return logo
 
     def save(self, commit=True):
         proyecto = super().save(commit=False)
         nuevo_estado = self.cleaned_data.get("estado")
+        cambio_a_cerrado = False
         if nuevo_estado and nuevo_estado != self._estado_original:
             proyecto.estado = nuevo_estado
             if nuevo_estado == Proyecto.ESTADO_FINALIZADO:
                 proyecto.finalizado_en = timezone.now()
             elif nuevo_estado == Proyecto.ESTADO_CANCELADO:
                 proyecto.cancelado_en = timezone.now()
+            cambio_a_cerrado = nuevo_estado in ESTADOS_CERRADOS
         if commit:
             proyecto.save()
+            # El logo subido necesita el pk para guardar el archivo en
+            # media/proyectos/<id>/, así que se guarda tras el proyecto.
+            procesado = self.cleaned_data.get("logo_procesado")
+            if procesado:
+                proyecto.logo_url = guardar_imagen(proyecto.pk, "logo", procesado)
+                proyecto.save()
+            # Cerrar el ciclo (finalizado/cancelado) deja sin postulaciones a
+            # las vacantes abiertas: misma regla que services.cambiar_estado.
+            if cambio_a_cerrado:
+                cerrar_vacantes_abiertas(proyecto)
         return proyecto
 
 
 class ProyectoMediaForm(InputClassesMixin, forms.ModelForm):
     """Alta de una imagen de la galería (tipo `prototipo`).
 
-    Espejo de `VacanteForm`. La "subida" es una URL en `archivo_url` (columna
-    TEXT del esquema), igual que `logo_url` — el procesado real de archivos
-    con Pillow llega como valor agregado (spec, CR carga de imágenes v1.0).
+    Espejo de `VacanteForm`. Formato híbrido: se puede SUBIR un archivo
+    (procesado con Pillow en media_utils y guardado en MEDIA_ROOT) o pegar
+    una URL externa; al menos uno de los dos es obligatorio. En ambos casos
+    el valor final queda en la columna TEXT `archivo_url` del esquema (ruta
+    relativa /media/... o URL externa), por eso el modelo no cambia.
     `orden` controla la posición en la galería; vacío = se agrega al final.
-    `tipo` no se ofrece al usuario: el editor de galería es solo de prototipos.
+    `tipo` no se ofrece al usuario: el editor de galería es solo de
+    prototipos.
     """
+
+    archivo = forms.ImageField(
+        label="Subir imagen",
+        required=False,
+        widget=forms.ClearableFileInput(
+            attrs={"class": InputClassesMixin.archivo_cls}
+        ),
+    )
 
     archivo_url = forms.CharField(
         label="URL de la imagen",
+        required=False,
         widget=forms.TextInput(
             attrs={
                 "placeholder": "https://...  o /media/...  (URL de la captura)",
@@ -185,35 +229,45 @@ class ProyectoMediaForm(InputClassesMixin, forms.ModelForm):
     def clean_archivo_url(self):
         url = (self.cleaned_data.get("archivo_url") or "").strip()
         if not url:
-            raise forms.ValidationError("Ingresá la URL de la imagen.")
+            return ""
         if not (
             url.startswith("http://")
             or url.startswith("https://")
-            or url.startswith("/")
+            or url.startswith("/media/")
         ):
             raise forms.ValidationError(
-                "La URL debe empezar con http(s):// o / (ruta de media)."
+                "La URL debe empezar con http(s):// o /media/ (ruta local)."
             )
         return url
 
     def clean_archivo(self):
-        """
-        Adorno preparado para Etapa 3 (archivos físicos). No se ejecuta
-        hasta que exista un campo 'archivo' (ImageField) real en el form.
+        """Valida y procesa el archivo subido con Pillow (media_utils): peso,
+        formato real y normalización. El ContentFile procesado queda en
+        `cleaned_data["archivo_procesado"]` y `save()` lo guarda en
+        MEDIA_ROOT, escribiendo la URL resultante en `archivo_url`.
         """
         archivo = self.cleaned_data.get("archivo")
-        if archivo and hasattr(archivo, 'size'):
-            limite_mb = 5
-            if archivo.size > limite_mb * 1024 * 1024:
-                raise forms.ValidationError(f"La imagen no puede pesar más de {limite_mb} MB.")
-            
-            tipos_permitidos = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-            if getattr(archivo, 'content_type', '') not in tipos_permitidos:
-                raise forms.ValidationError("Formato no soportado. Sube una imagen JPG, PNG, WEBP o GIF.")
+        if archivo:
+            self.cleaned_data["archivo_procesado"] = procesar_imagen(
+                archivo, "prototipo"
+            )
         return archivo
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if not cleaned_data.get("archivo") and not cleaned_data.get("archivo_url"):
+            raise forms.ValidationError(
+                "Sube una imagen o pegá su URL."
+            )
+        return cleaned_data
 
     def save(self, commit=True):
         media = super().save(commit=False)
+        procesado = self.cleaned_data.get("archivo_procesado")
+        if procesado:
+            media.archivo_url = guardar_imagen(
+                self.proyecto.pk, "prototipo", procesado
+            )
         if media.orden is None:
             media.orden = self._siguiente_orden()
         if commit:
