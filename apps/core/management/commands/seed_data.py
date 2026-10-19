@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 
 from django.apps import apps as django_apps
@@ -21,6 +22,14 @@ class Command(BaseCommand):
     (get_or_create por email / creador+nombre). NO usa borrados físicos,
     respetando los triggers de bloqueo del esquema oficial.
 
+    Fechas escalonadas: los datos demo se fechan relativos a "ahora" con
+    `_hace_dias(n)`, para que los listados ordenados por fecha (galería,
+    dashboard, "recientes" del perfil) tengan un orden verificable a simple
+    vista. Los campos auto_now_add (creado_en, postulado_en, ingreso_en)
+    ignoran el valor que se pasa a create(), así que se corrigen SIEMPRE con
+    un UPDATE posterior al get_or_create, tanto si la fila es nueva como si ya
+    existía. Cada corrida vuelve a fijar los mismos desfases relativos.
+
     TODO: revisar las vacantes que este seed crea en proyectos
     finalizado/cancelado. Desde que el alta de vacantes se bloquea en
     proyectos cerrados, esas filas quedan en un estado que la interfaz ya no
@@ -29,7 +38,9 @@ class Command(BaseCommand):
 
     help = "Genera datos de prueba (fixtures) para Squad B."
 
+    @transaction.atomic
     def handle(self, *args, **options):
+        # Todo o nada: si un trigger rechaza algo, la corrida no queda a medias.
         self.stdout.write(self.style.NOTICE("== DevMatch: seed_data =="))
         self.seed_usuarios()
         self.seed_proyectos()
@@ -54,6 +65,19 @@ class Command(BaseCommand):
             contador += 1
         return candidato
 
+    @staticmethod
+    def _hace_dias(n):
+        """Momento de hace `n` días (puede ser fraccionario: 2.9 = 2 d 14 h)."""
+        return timezone.now() - timedelta(days=n)
+
+    @staticmethod
+    def _fijar(Modelo, pk, **campos):
+        """
+        Corrige fechas auto_now_add con un UPDATE posterior al INSERT. No toca
+        `estado`, así que no dispara los triggers de transición ni de cupos.
+        """
+        Modelo.objects.filter(pk=pk).update(**campos)
+
     # ------------------------------------------------------------------
     # USUARIOS Y PERFILES
     # ------------------------------------------------------------------
@@ -72,6 +96,7 @@ class Command(BaseCommand):
             {
                 "email": "admin@devmatch.local",
                 "username": "admin",
+                "creado_hace": 120,
                 "first_name": "Aura",
                 "last_name": "López",
                 "es_admin": True,
@@ -89,6 +114,7 @@ class Command(BaseCommand):
             {
                 "email": "maria@devmatch.local",
                 "username": "maria",
+                "creado_hace": 110,
                 "first_name": "María",
                 "last_name": "Gutiérrez",
                 "es_admin": False,
@@ -106,6 +132,7 @@ class Command(BaseCommand):
             {
                 "email": "juan@devmatch.local",
                 "username": "juan",
+                "creado_hace": 105,
                 "first_name": "Juan",
                 "last_name": "Pérez",
                 "es_admin": False,
@@ -123,6 +150,7 @@ class Command(BaseCommand):
             {
                 "email": "carlos@devmatch.local",
                 "username": "carlos",
+                "creado_hace": 95,
                 "first_name": "Carlos",
                 "last_name": "Mendoza",
                 "es_admin": False,
@@ -140,6 +168,7 @@ class Command(BaseCommand):
             {
                 "email": "ana@devmatch.local",
                 "username": "ana",
+                "creado_hace": 100,
                 "first_name": "Ana",
                 "last_name": "Ríos",
                 "es_admin": False,
@@ -205,6 +234,9 @@ class Command(BaseCommand):
             for nombre in datos["intereses"]:
                 interes = self._catalogo(Interes, nombre)
                 UsuarioInteres.objects.get_or_create(usuario=usuario, interes=interes)
+            self._fijar(
+                Usuario, usuario.pk, creado_en=self._hace_dias(datos["creado_hace"])
+            )
 
         self.stdout.write(self.style.SUCCESS(f"  usuarios y perfiles: {len(usuarios)}"))
 
@@ -226,6 +258,7 @@ class Command(BaseCommand):
             {
                 "creador": "maria@devmatch.local",
                 "nombre": "BrainTwist — Quizzes educativos",
+                "creado_hace": 10,
                 "descripcion": "Plataforma de quizzes con dificultad adaptativa para aulas.",
                 "estado": Proyecto.ESTADO_PUBLICADO,
                 "media": [{"tipo": ProyectoMedia.TIPO_LOGO, "archivo_url": "/media/seed/braintwist.png", "orden": 0}],
@@ -251,6 +284,7 @@ class Command(BaseCommand):
             {
                 "creador": "maria@devmatch.local",
                 "nombre": "ClinVis — Dashboards clínicos",
+                "creado_hace": 40,
                 "descripcion": "Visualización de indicadores para centros de salud.",
                 "estado": Proyecto.ESTADO_RECLUTANDO,
                 "media": [{"tipo": ProyectoMedia.TIPO_LOGO, "archivo_url": "/media/seed/clinvis.png", "orden": 0}],
@@ -276,6 +310,7 @@ class Command(BaseCommand):
             {
                 "creador": "juan@devmatch.local",
                 "nombre": "DevRoom — Comunidad dev",
+                "creado_hace": 55,
                 "descripcion": "Red social ligera para estudiantes y desarrolladores junior.",
                 "estado": Proyecto.ESTADO_EQUIPO_COMPLETO,
                 "media": [],
@@ -284,6 +319,7 @@ class Command(BaseCommand):
             {
                 "creador": "maria@devmatch.local",
                 "nombre": "FitTrack — App de hábitos",
+                "creado_hace": 68,
                 "descripcion": "Seguimiento de hábitos y rutinas de ejercicio con gráficos.",
                 "estado": Proyecto.ESTADO_EN_DESARROLLO,
                 "media": [],
@@ -292,6 +328,8 @@ class Command(BaseCommand):
             {
                 "creador": "juan@devmatch.local",
                 "nombre": "ViajeSeguro — Alertas de viaje",
+                "creado_hace": 90,
+                "cierre_hace": 30,
                 "descripcion": "Sistema de alertas de seguridad para viajeros.",
                 "estado": Proyecto.ESTADO_FINALIZADO,
                 "media": [],
@@ -300,6 +338,7 @@ class Command(BaseCommand):
             {
                 "creador": "juan@devmatch.local",
                 "nombre": "PetMatch — Adopción responsable",
+                "creado_hace": 18,
                 "descripcion": "Conectar refugios con familias adoptantes y dar seguimiento a las adopciones.",
                 "estado": Proyecto.ESTADO_RECLUTANDO,
                 "media": [],
@@ -317,6 +356,7 @@ class Command(BaseCommand):
             {
                 "creador": "maria@devmatch.local",
                 "nombre": "ResuMate — Optimizador de CV",
+                "creado_hace": 3,
                 "descripcion": "Sugerencias automáticas para armar un CV orientado a reclutadores tech.",
                 "estado": Proyecto.ESTADO_PUBLICADO,
                 "media": [],
@@ -334,6 +374,7 @@ class Command(BaseCommand):
             {
                 "creador": "juan@devmatch.local",
                 "nombre": "GymLog — Entrenamientos colaborativos",
+                "creado_hace": 27,
                 "descripcion": "Rutinas compartidas y seguimiento de progreso entre estudiantes.",
                 "estado": Proyecto.ESTADO_RECLUTANDO,
                 "media": [],
@@ -351,6 +392,8 @@ class Command(BaseCommand):
             {
                 "creador": "maria@devmatch.local",
                 "nombre": "MarketAI — IA de precios",
+                "creado_hace": 80,
+                "cierre_hace": 50,
                 "descripcion": "Motor piloto de estimación de precios que no llegó a validarse.",
                 "estado": Proyecto.ESTADO_CANCELADO,
                 "media": [],
@@ -386,6 +429,17 @@ class Command(BaseCommand):
                     proyecto.estado = datos["estado"]
                 proyecto.save(update_fields=["descripcion", "estado", "es_activo"])
 
+            fechas = {"creado_en": self._hace_dias(datos["creado_hace"])}
+            # finalizado_en/cancelado_en: el trigger solo los rellena al CAMBIAR
+            # de estado; el seed inserta ya en estado terminal, así que se fijan
+            # aquí, coherentes con el estado real del proyecto.
+            if "cierre_hace" in datos:
+                if proyecto.estado == Proyecto.ESTADO_FINALIZADO:
+                    fechas["finalizado_en"] = self._hace_dias(datos["cierre_hace"])
+                elif proyecto.estado == Proyecto.ESTADO_CANCELADO:
+                    fechas["cancelado_en"] = self._hace_dias(datos["cierre_hace"])
+            self._fijar(Proyecto, proyecto.pk, **fechas)
+
             for media in datos["media"]:
                 ProyectoMedia.objects.get_or_create(
                     proyecto=proyecto,
@@ -393,7 +447,7 @@ class Command(BaseCommand):
                     defaults={"archivo_url": media["archivo_url"], "orden": media["orden"]},
                 )
 
-            for vacante in datos["vacantes"]:
+            for orden, vacante in enumerate(datos["vacantes"]):
                 vac, _creada = Vacante.objects.get_or_create(
                     proyecto=proyecto,
                     titulo=vacante["titulo"],
@@ -408,6 +462,11 @@ class Command(BaseCommand):
                     vac.cupos_totales = vacante["cupos_totales"]
                     vac.es_activo = True
                     vac.save(update_fields=["estado", "cupos_totales", "es_activo"])
+                self._fijar(
+                    Vacante,
+                    vac.pk,
+                    creado_en=self._hace_dias(datos["creado_hace"] - 0.1 * (orden + 1)),
+                )
                 for nombre in vacante["habilidades"]:
                     habilidad = self._catalogo(Habilidad, nombre)
                     VacanteHabilidad.objects.get_or_create(vacante=vac, habilidad=habilidad)
@@ -550,6 +609,7 @@ class Command(BaseCommand):
                 "vacante": "Frontend Developer",
                 "estado": Postulacion.ESTADO_PENDIENTE,
                 "factores": {"habilidades": 95, "nivel": 80, "tecnologias": 100, "experiencia": 70, "disponibilidad": 100},
+                "postulado_hace": 8,
             },
             {
                 "postulante": "ana@devmatch.local",
@@ -557,6 +617,7 @@ class Command(BaseCommand):
                 "vacante": "Data Scientist",
                 "estado": Postulacion.ESTADO_PENDIENTE,
                 "factores": {"habilidades": 90, "nivel": 80, "tecnologias": 100, "experiencia": 70, "disponibilidad": 80},
+                "postulado_hace": 30,
             },
             {
                 "postulante": "carlos@devmatch.local",
@@ -564,6 +625,7 @@ class Command(BaseCommand):
                 "vacante": "Frontend Developer",
                 "estado": Postulacion.ESTADO_PRESELECCIONADA,
                 "factores": {"habilidades": 70, "nivel": 40, "tecnologias": 80, "experiencia": 30, "disponibilidad": 70},
+                "postulado_hace": 6,
             },
             {
                 "postulante": "ana@devmatch.local",
@@ -571,6 +633,7 @@ class Command(BaseCommand):
                 "vacante": "Backend Developer",
                 "estado": Postulacion.ESTADO_PENDIENTE,
                 "factores": {"habilidades": 55, "nivel": 80, "tecnologias": 85, "experiencia": 60, "disponibilidad": 80},
+                "postulado_hace": 35,
             },
             {
                 "postulante": "carlos@devmatch.local",
@@ -578,6 +641,8 @@ class Command(BaseCommand):
                 "vacante": "Backend Developer",
                 "estado": Postulacion.ESTADO_RECHAZADA,
                 "factores": {"habilidades": 25, "nivel": 40, "tecnologias": 30, "experiencia": 20, "disponibilidad": 70},
+                "postulado_hace": 33,
+                "decidido_hace": 28,
                 "motivo": "Perfil sin experiencia en backend.",
             },
             {
@@ -586,6 +651,7 @@ class Command(BaseCommand):
                 "vacante": "Backend Developer",
                 "estado": Postulacion.ESTADO_PENDIENTE,
                 "factores": {"habilidades": 25, "nivel": 100, "tecnologias": 40, "experiencia": 100, "disponibilidad": 100},
+                "postulado_hace": 2,
             },
             {
                 "postulante": "carlos@devmatch.local",
@@ -593,6 +659,7 @@ class Command(BaseCommand):
                 "vacante": "Backend Developer",
                 "estado": Postulacion.ESTADO_PENDIENTE,
                 "factores": {"habilidades": 10, "nivel": 40, "tecnologias": 20, "experiencia": 15, "disponibilidad": 60},
+                "postulado_hace": 1,
             },
         ]
 
@@ -621,8 +688,11 @@ class Command(BaseCommand):
                 Postulacion.ESTADO_RECHAZADA,
             ):
                 defaults["decidido_por"] = proyecto.creador
-                defaults["decidido_en"] = timezone.now()
-            self._upsert_postulacion(Postulacion, vacante, usuario, defaults)
+                defaults["decidido_en"] = self._hace_dias(esc["decidido_hace"])
+            post = self._upsert_postulacion(Postulacion, vacante, usuario, defaults)
+            self._fijar(
+                Postulacion, post.pk, postulado_en=self._hace_dias(esc["postulado_hace"])
+            )
             creadas += 1
 
         # Membresías por postulación aceptada. La aceptación y el INSERT de la
@@ -631,13 +701,15 @@ class Command(BaseCommand):
         # escribimos a mano. `carlos` queda con 2 membresías activas y pocas
         # horas de disponibilidad -> escenario de choque de disponibilidad;
         # ResuMate queda con 1/2 cupos (casi llena) -> límite de cupos.
+        # Cada tupla: (email, proyecto, vacante, postulado_hace, decidido_hace),
+        # con los desfases en días.
         aceptadas = [
-            ("ana@devmatch.local", "ResuMate — Optimizador de CV", "Backend Developer"),
-            ("carlos@devmatch.local", "BrainTwist — Quizzes educativos", "QA / Testing"),
-            ("carlos@devmatch.local", "GymLog — Entrenamientos colaborativos", "Frontend Developer"),
+            ("ana@devmatch.local", "ResuMate — Optimizador de CV", "Backend Developer", 2.5, 2.2),
+            ("carlos@devmatch.local", "BrainTwist — Quizzes educativos", "QA / Testing", 9, 7),
+            ("carlos@devmatch.local", "GymLog — Entrenamientos colaborativos", "Frontend Developer", 25, 22),
         ]
         membresias = 0
-        for email, nombre_proyecto, titulo_vacante in aceptadas:
+        for email, nombre_proyecto, titulo_vacante, postulado_hace, decidido_hace in aceptadas:
             usuario = Usuario.objects.filter(email=email).first()
             proyecto, vacante = self._buscar_vacante(
                 Proyecto, Vacante, nombre_proyecto, titulo_vacante
@@ -648,6 +720,7 @@ class Command(BaseCommand):
                 pesos,
                 {"habilidades": 80, "nivel": 70, "tecnologias": 80, "experiencia": 60, "disponibilidad": 80},
             )
+            fecha_decision = self._hace_dias(decidido_hace)
             try:
                 with transaction.atomic():
                     postulacion = self._upsert_postulacion(
@@ -660,11 +733,11 @@ class Command(BaseCommand):
                             "match_factores": factores,
                             "pesos_usados": pesos,
                             "decidido_por": proyecto.creador,
-                            "decidido_en": timezone.now(),
+                            "decidido_en": fecha_decision,
                             "motivo_decision": "",
                         },
                     )
-                    EquipoMembresia.objects.get_or_create(
+                    membresia, _ = EquipoMembresia.objects.get_or_create(
                         vacante=vacante,
                         usuario=usuario,
                         defaults={
@@ -674,22 +747,31 @@ class Command(BaseCommand):
                             "estado": EquipoMembresia.ESTADO_ACTIVO,
                         },
                     )
+                    self._fijar(
+                        Postulacion,
+                        postulacion.pk,
+                        postulado_en=self._hace_dias(postulado_hace),
+                    )
+                    # Ingresa al equipo en el momento en que se acepta.
+                    self._fijar(EquipoMembresia, membresia.pk, ingreso_en=fecha_decision)
                     membresias += 1
             except Exception:
                 continue
 
         # Membresía por invitación aceptada (origen XOR: invitación, no
         # postulación) para que Squad B pueda probar ambos caminos de ingreso.
+        # Cada tupla: (email, proyecto, vacante, creada_hace, respondida_hace).
         invitaciones = [
-            ("admin@devmatch.local", "PetMatch — Adopción responsable", "Fullstack Developer"),
+            ("admin@devmatch.local", "PetMatch — Adopción responsable", "Fullstack Developer", 15, 13),
         ]
-        for email, nombre_proyecto, titulo_vacante in invitaciones:
+        for email, nombre_proyecto, titulo_vacante, creada_hace, respondida_hace in invitaciones:
             usuario = Usuario.objects.filter(email=email).first()
             proyecto, vacante = self._buscar_vacante(
                 Proyecto, Vacante, nombre_proyecto, titulo_vacante
             )
             if usuario is None or vacante is None or proyecto.creador_id == usuario.id:
                 continue
+            fecha_respuesta = self._hace_dias(respondida_hace)
             try:
                 with transaction.atomic():
                     invitacion, _ = Invitacion.objects.get_or_create(
@@ -698,14 +780,20 @@ class Command(BaseCommand):
                         defaults={
                             "invitado_por": proyecto.creador,
                             "estado": Invitacion.ESTADO_ACEPTADA,
-                            "respondido_en": timezone.now(),
+                            "respondido_en": fecha_respuesta,
                         },
                     )
                     if invitacion.estado != Invitacion.ESTADO_ACEPTADA:
                         invitacion.estado = Invitacion.ESTADO_ACEPTADA
-                        invitacion.respondido_en = timezone.now()
+                        invitacion.respondido_en = fecha_respuesta
                         invitacion.save(update_fields=["estado", "respondido_en"])
-                    EquipoMembresia.objects.get_or_create(
+                    self._fijar(
+                        Invitacion,
+                        invitacion.pk,
+                        creado_en=self._hace_dias(creada_hace),
+                        respondido_en=fecha_respuesta,
+                    )
+                    membresia, _ = EquipoMembresia.objects.get_or_create(
                         vacante=vacante,
                         usuario=usuario,
                         defaults={
@@ -715,6 +803,7 @@ class Command(BaseCommand):
                             "estado": EquipoMembresia.ESTADO_ACTIVO,
                         },
                     )
+                    self._fijar(EquipoMembresia, membresia.pk, ingreso_en=fecha_respuesta)
                     membresias += 1
             except Exception:
                 continue

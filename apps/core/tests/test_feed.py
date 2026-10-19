@@ -1,6 +1,9 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.accounts.models import Habilidad, Perfil, Tecnologia
 from apps.projects.models import (
@@ -222,6 +225,30 @@ class FeedViewTests(TestCase):
         card = resp.context["proyectos"][0]
         self.assertEqual(card.cupos_totales_total, 0)
         self.assertEqual(card.tecnologias, [])
+
+    # -- Orden ---------------------------------------------------------------
+
+    def test_feed_ordena_por_fecha_de_publicacion_no_de_actualizacion(self):
+        primero = self._crear_proyecto("Primero")
+        segundo = self._crear_proyecto("Segundo")
+        tercero = self._crear_proyecto("Tercero")
+
+        # Simula el fixup de fechas del seed: un UPDATE masivo deja a TODAS las
+        # filas con el mismo `actualizado_en` (lo fuerza el trigger
+        # `fn_set_updated_at`), así que ordenar por ahí degenera en el desempate
+        # por pk. El feed debe ordenar por `creado_en`.
+        Proyecto.objects.update(descripcion="editada")
+        base = timezone.now()
+        Proyecto.objects.filter(pk=primero.pk).update(creado_en=base)
+        Proyecto.objects.filter(pk=tercero.pk).update(creado_en=base - timedelta(days=1))
+        Proyecto.objects.filter(pk=segundo.pk).update(creado_en=base - timedelta(days=2))
+
+        self._login()
+        resp = self.client.get(reverse("core:feed"))
+        self.assertEqual(
+            [p.nombre for p in resp.context["proyectos"]],
+            ["Primero", "Tercero", "Segundo"],
+        )
 
 
 class FeedFilterViewTests(TestCase):

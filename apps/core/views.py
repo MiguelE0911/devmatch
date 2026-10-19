@@ -133,9 +133,11 @@ def _orden_por_relevancia(proyectos, texto):
     3. la descripción contiene el término
     4. solo un requisito (tecnología/habilidad) de una vacante activa coincide
 
-    El desempate conserva el orden del feed (más reciente primero). Así, al
-    buscar "dev", un proyecto llamado "DevMatch" gana a uno que solo lo
-    menciona en su descripción o stack.
+    El desempate conserva el orden del feed: `creado_en` (publicación) y NO
+    `actualizado_en`, que el trigger `fn_set_updated_at` reescribe en cada
+    UPDATE. Así, al buscar "dev", un proyecto llamado "DevMatch" gana a uno
+    que solo lo menciona en su descripción o stack, y los empates respetan la
+    misma "reciente primero" que el feed sin búsqueda.
     """
     return proyectos.annotate(
         _relevancia=Case(
@@ -146,7 +148,7 @@ def _orden_por_relevancia(proyectos, texto):
             default=Value(4),
             output_field=IntegerField(),
         )
-    ).order_by("_relevancia", "-actualizado_en", "-pk")
+    ).order_by("_relevancia", "-creado_en", "-pk")
 
 
 def _iniciales(nombre):
@@ -225,7 +227,12 @@ class FeedView(LoginRequiredMixin, View):
             .exclude(estado__in=ESTADOS_OCULTOS)
             .select_related("creador")
             .prefetch_related(VACANTES_ACTIVAS, LOGOS_PROYECTO)
-            .order_by("-actualizado_en", "-pk")
+            # Orden por fecha de publicación (creado_en), NO por actualizado_en:
+            # el trigger fn_set_updated_at reescribe actualizado_en en cada
+            # UPDATE, así que un simple backdate del seed dejaría a todos los
+            # proyectos con la misma marca y rompería tanto el orden escalonado
+            # como la etiqueta "publicado hace X" (que ya usa creado_en).
+            .order_by("-creado_en", "-pk")
         )
 
         estado = request.GET.get("estado")
