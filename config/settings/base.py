@@ -151,5 +151,17 @@ STATIC_ROOT = BASE_DIR / "staticfiles"  # usado solo por collectstatic en prod
  
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
- 
+
+# Neon Object Storage (bucket "public_read" del proyecto del curso). Con las 5
+# vars completas, media_utils.guardar_imagen sube las imagenes al bucket y
+# devuelve su URL publica; si falta alguna, guarda en MEDIA_ROOT local
+# (fallback: la app funciona igual, pero esas imagenes solo se ven en esta
+# maquina). La credencial se reparte por canal seguro y NUNCA se commitea.
+# Detalle del plan: bóveda -> 05 - Integraciones/Neon Object Storage.
+AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", "")
+AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
+AWS_ENDPOINT_URL_S3 = os.environ.get("AWS_ENDPOINT_URL_S3", "")
+AWS_REGION = os.environ.get("AWS_REGION", "")
+NEON_STORAGE_BUCKET = os.environ.get("NEON_STORAGE_BUCKET", "")
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

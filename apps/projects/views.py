@@ -2,6 +2,7 @@ import json
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import JsonResponse, Http404, HttpResponseRedirect
 from django.db.models import Q
@@ -502,8 +503,16 @@ class ProyectoGaleriaEditView(LoginRequiredMixin, CreateView):
         form.instance.proyecto = self.proyecto
         form.instance.tipo = ProyectoMedia.TIPO_PROTOTIPO
         form.instance.es_activo = True
+        try:
+            with transaction.atomic():
+                self.object = super().form_valid(form)
+        except ValidationError as exc:
+            # Fallo del storage al guardar la imagen (media_utils): la fila no
+            # se crea y el formulario re-renderiza con el error.
+            form.add_error(None, exc)
+            return self.form_invalid(form)
         messages.success(self.request, "La imagen se subió correctamente.")
-        return super().form_valid(form)
+        return self.object
 
     def get_success_url(self):
         return (
@@ -630,8 +639,14 @@ class ProyectoEditView(LoginRequiredMixin, UpdateView):
         return ctx
 
     def form_valid(self, form):
+        try:
+            with transaction.atomic():
+                response = super().form_valid(form)
+        except ValidationError as exc:
+            form.add_error(None, exc)
+            return self.form_invalid(form)
         messages.success(self.request, "Proyecto actualizado correctamente.")
-        return super().form_valid(form)
+        return response
 
     def get_success_url(self):
         return reverse("projects:project_detail", kwargs={"pk": self.object.pk})
@@ -720,7 +735,15 @@ class ProyectoCreateView(LoginRequiredMixin, CreateView):
     def form_valid(self, form):
         form.instance.creador = self.request.user
         form.instance.es_activo = True
-        self.object = form.save()
+        try:
+            with transaction.atomic():
+                self.object = form.save()
+        except ValidationError as exc:
+            # Fallo del storage al subir el logo: rollback (no queda proyecto
+            # a medias) y el error como non-field error, sin duplicar al
+            # reintentar.
+            form.add_error(None, exc)
+            return self.form_invalid(form)
         messages.success(self.request, "¡Proyecto creado exitosamente!")
         if self._es_ajax():
             return JsonResponse({"ok": True, "redirect": self.get_success_url()})

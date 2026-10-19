@@ -67,7 +67,11 @@ pip install "dj-database-url>=3.1.2"
 pip install "python-dotenv>=1.0,<2.0"
 pip install "psycopg2-binary>=2.9,<3.0"
 pip install "whitenoise>=6.7,<7.0"
+pip install "Pillow>=10,<13"
+pip install "boto3>=1.34,<2.0"
 ```
+
+> Alternativa: `pip install -r requirements.txt` instala todo lo anterior de una vez (es la fuente de verdad de las versiones).
 
 ---
 
@@ -106,6 +110,22 @@ DJANGO_SECRET_KEY=tu_llave_secreta
 ```
 
 > **Importante:** el archivo `.env` es local y no debe subirse al repositorio.
+
+### Storage de imágenes (opcional)
+
+Los logos y prototipos se procesan con Pillow (peso, formato real y redimensión) antes de guardarse. Por defecto el archivo se guarda en `media/` local, así que **tú lo ves pero tus compañeros no**: solo funciona para desarrollo individual.
+
+Para que todo el equipo vea las imágenes subidas, pide al Integrador la credencial de **Neon Object Storage** y descomenta el bloque correspondiente en tu `.env` (ver `.env.example`):
+
+```env
+AWS_ACCESS_KEY_ID=nak_live_...
+AWS_SECRET_ACCESS_KEY=nsk_live_...
+AWS_ENDPOINT_URL_S3=https://<branch-id>.storage.c-2.us-east-2.aws.neon.tech
+AWS_REGION=us-east-2
+NEON_STORAGE_BUCKET=devmatch-media
+```
+
+Si esas 5 variables están completas, las imágenes se suben al bucket del equipo (URL https pública, visible en las páginas de proyecto). Si falta alguna, la app sigue funcionando con el guardado local. Nunca subas `.env` al repositorio.
 
 ---
 

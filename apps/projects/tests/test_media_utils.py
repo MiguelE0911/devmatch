@@ -16,6 +16,8 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, override_settings
 from PIL import Image
 
+from botocore.exceptions import ClientError
+
 from apps.projects.media_utils import LIMITE_MB, MAX_PX, guardar_imagen, procesar_imagen
 
 
@@ -119,6 +121,19 @@ class ProcesarImagenTests(_BaseMedia):
         self.assertEqual(self._leer(resultado), gif_bytes)
 
 
+# Las 5 vars de Neon Object Storage vacías: el camino local no debe subir
+# nada al bucket real aunque el `.env` de quien corre los tests tenga
+# credenciales (el runner las carga en settings).
+_STORAGE_OFF = {
+    "AWS_ACCESS_KEY_ID": "",
+    "AWS_SECRET_ACCESS_KEY": "",
+    "AWS_ENDPOINT_URL_S3": "",
+    "AWS_REGION": "",
+    "NEON_STORAGE_BUCKET": "",
+}
+
+
+@override_settings(**_STORAGE_OFF)
 class GuardarImagenTests(_BaseMedia):
     def test_guardar_imagen_persiste_el_archivo_y_devuelve_url(self):
         archivo = self._subido("foto.png", _crear_bytes("PNG"))
@@ -134,3 +149,103 @@ class GuardarImagenTests(_BaseMedia):
         with self.assertRaises(ValidationError) as ctx:
             guardar_imagen(1, "prototipo", ContentFile(b""))
         self.assertIn("no está procesado", " ".join(ctx.exception.messages))
+
+
+_STORAGE = {
+    "AWS_ACCESS_KEY_ID": "nak_live_prueba",
+    "AWS_SECRET_ACCESS_KEY": "nsk_live_prueba",
+    "AWS_ENDPOINT_URL_S3": "https://br-prueba.storage.c-2.us-east-2.aws.neon.tech",
+    "AWS_REGION": "us-east-2",
+    "NEON_STORAGE_BUCKET": "devmatch-media",
+}
+
+
+@override_settings(**_STORAGE)
+class GuardarEnNeonTests(_BaseMedia):
+    """Camino Neon Object Storage: las 5 vars completas => put_object al
+    bucket y URL pública; sin config => fallback local (cubierto por
+    GuardarImagenTests, que corre sin esas vars).
+    """
+
+    def _procesar(self, tipo="prototipo"):
+        archivo = self._subido("foto.png", _crear_bytes("PNG"))
+        return procesar_imagen(archivo, tipo)
+
+    def test_sube_al_bucket_y_devuelve_url_publica(self):
+        procesado = self._procesar()
+        bytes_originales = self._leer(procesado)
+        with patch("apps.projects.media_utils.boto3.client") as mock_cliente:
+            url = guardar_imagen(7, "prototipo", procesado)
+        clave_mock = mock_cliente.return_value.put_object.call_args
+        self.assertEqual(clave_mock.kwargs["Bucket"], "devmatch-media")
+        self.assertRegex(
+            clave_mock.kwargs["Key"], r"^proyectos/7/prototipo-[0-9a-f]{8}\.png$"
+        )
+        self.assertEqual(clave_mock.kwargs["Body"], bytes_originales)
+        self.assertEqual(clave_mock.kwargs["ContentType"], "image/png")
+        self.assertEqual(
+            url,
+            "https://br-prueba.storage.c-2.us-east-2.aws.neon.tech"
+            f"/devmatch-media/{clave_mock.kwargs['Key']}",
+        )
+
+    def test_configura_el_cliente_con_path_style(self):
+        with patch("apps.projects.media_utils.boto3.client") as mock_cliente:
+            guardar_imagen(1, "prototipo", self._procesar())
+        kwargs = mock_cliente.call_args.kwargs
+        self.assertEqual(kwargs["endpoint_url"], _STORAGE["AWS_ENDPOINT_URL_S3"])
+        self.assertEqual(kwargs["region_name"], "us-east-2")
+        self.assertEqual(kwargs["aws_access_key_id"], "nak_live_prueba")
+        self.assertEqual(kwargs["config"].signature_version, "s3v4")
+        self.assertEqual(kwargs["config"].s3.get("addressing_style"), "path")
+
+    def test_error_del_storage_lanza_validation_error(self):
+        error = ClientError(
+            {"Error": {"Code": "AccessDenied", "Message": "denied"}}, "PutObject"
+        )
+        with patch("apps.projects.media_utils.boto3.client") as mock_cliente:
+            mock_cliente.return_value.put_object.side_effect = error
+            with self.assertRaises(ValidationError) as ctx:
+                guardar_imagen(1, "prototipo", self._procesar())
+        self.assertIn("No se pudo guardar", " ".join(ctx.exception.messages))
+
+    @override_settings(NEON_STORAGE_BUCKET="")
+    def test_config_incompleta_usa_el_fallback_local(self):
+        archivo = self._subido("foto.png", _crear_bytes("PNG"))
+        procesado = procesar_imagen(archivo, "logo")
+        with patch("apps.projects.media_utils.boto3.client") as mock_cliente:
+            url = guardar_imagen(3, "logo", procesado)
+        mock_cliente.assert_not_called()
+        self.assertTrue(url.startswith("/media/proyectos/3/"))
+        ruta_en_disco = os.path.join(
+            self.media_root, "proyectos", "3", os.path.basename(url)
+        )
+        self.assertTrue(os.path.isfile(ruta_en_disco), ruta_en_disco)
+
+    @override_settings(AWS_ENDPOINT_URL_S3="http://inseguro.example.com")
+    def test_endpoint_no_https_usa_el_fallback_local(self):
+        # Un endpoint http no debe firmarse en claro: se ignora y se usa el
+        # guardado local.
+        archivo = self._subido("foto.png", _crear_bytes("PNG"))
+        procesado = procesar_imagen(archivo, "logo")
+        with patch("apps.projects.media_utils.boto3.client") as mock_cliente:
+            url = guardar_imagen(3, "logo", procesado)
+        mock_cliente.assert_not_called()
+        self.assertTrue(url.startswith("/media/proyectos/3/"))
+
+    @override_settings(AWS_REGION="  us-east-2  ")
+    def test_las_vars_del_env_se_estripan_antes_de_firmar(self):
+        with patch("apps.projects.media_utils.boto3.client") as mock_cliente:
+            guardar_imagen(1, "prototipo", self._procesar())
+        kwargs = mock_cliente.call_args.kwargs
+        self.assertEqual(kwargs["region_name"], "us-east-2")
+        self.assertFalse(kwargs["endpoint_url"].endswith(" "))
+
+    def test_logo_subido_tambien_usa_el_bucket(self):
+        archivo = self._subido("logo.png", _crear_bytes("PNG"))
+        procesado = procesar_imagen(archivo, "logo")
+        with patch("apps.projects.media_utils.boto3.client") as mock_cliente:
+            url = guardar_imagen(9, "logo", procesado)
+        clave = mock_cliente.return_value.put_object.call_args.kwargs["Key"]
+        self.assertTrue(clave.startswith("proyectos/9/logo-"))
+        self.assertIn("/devmatch-media/", url)

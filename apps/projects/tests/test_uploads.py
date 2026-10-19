@@ -4,15 +4,22 @@ Formularios: `ProyectoMediaForm` (galería, híbrido archivo/URL) y
 `ProyectoForm` (logo). Vistas: `ProyectoGaleriaEditView` y
 `ProyectoCreateView`. Las imágenes se generan en memoria con Pillow y se
 guardan en un MEDIA_ROOT temporal (override_settings + cleanup); ningún
-fichero del repo se ensucia. TestCase normal porque las vistas/formularios
+fichero del repo se ensucia. TestCase normal porque los formularios/vistas
 toquetean la BD de pruebas (Neon).
+
+Las 5 vars de Neon Object Storage se fuerzan vacías: estos tests validan el
+camino LOCAL y no deben subir nada al bucket real aunque el `.env` de quien
+corre los tests tenga credenciales. El camino S3 se prueba con mocks en
+test_media_utils.py (GuardarEnNeonTests).
 """
 
 import io
 import os
 import tempfile
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -36,7 +43,16 @@ class _BaseUploads(TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
         self.media_root = self._tmp.name
-        ajustes = override_settings(MEDIA_ROOT=self.media_root, MEDIA_URL="/media/")
+        ajustes = override_settings(
+            MEDIA_ROOT=self.media_root,
+            MEDIA_URL="/media/",
+            # Fallback local garantizado (ver docstring del módulo).
+            AWS_ACCESS_KEY_ID="",
+            AWS_SECRET_ACCESS_KEY="",
+            AWS_ENDPOINT_URL_S3="",
+            AWS_REGION="",
+            NEON_STORAGE_BUCKET="",
+        )
         ajustes.enable()
         self.addCleanup(ajustes.disable)
         self.creador = Usuario.objects.create_user(
@@ -217,3 +233,70 @@ class ProyectoCreateSubidaViewTests(_BaseUploads):
         self.assertEqual(resp.status_code, 302)
         proyecto = Proyecto.objects.get(nombre="Nuevo con url")
         self.assertEqual(proyecto.logo_url, "https://example.com/logo.png")
+
+
+class FalloStorageEnVistaTests(_BaseUploads):
+    """Si `guardar_imagen` falla (storage caído / credencial vencida), las
+    vistas deben re-renderizar el formulario con el error en vez de devolver
+   500, y sin dejar proyectos/medias a medias (M1 de la revisión de
+    seguridad).
+    """
+
+    _ERROR = "No se pudo guardar la imagen en el storage. Inténtalo de nuevo."
+
+    def _patch_fallo(self):
+        return patch(
+            "apps.projects.forms.guardar_imagen",
+            side_effect=ValidationError(self._ERROR),
+        )
+
+    def test_create_responde_200_sin_crear_proyecto(self):
+        self.client.force_login(self.creador)
+        with self._patch_fallo():
+            resp = self.client.post(
+                reverse("projects:project_create"),
+                {
+                    "nombre": "No debe existir",
+                    "descripcion": "desc",
+                    "logo_url": "",
+                    "logo": self._png("logo.png"),
+                },
+            )
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(Proyecto.objects.filter(nombre="No debe existir").exists())
+        self.assertIn(self._ERROR, resp.context["form"].errors["__all__"])
+
+    def test_galeria_responde_200_sin_crear_media(self):
+        self.client.force_login(self.creador)
+        with self._patch_fallo():
+            resp = self.client.post(
+                reverse("projects:project_gallery_edit", args=[self.proyecto.pk]),
+                {"archivo_url": "", "orden": "", "archivo": self._png()},
+            )
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(
+            ProyectoMedia.objects.filter(proyecto=self.proyecto).exists()
+        )
+        self.assertIn(self._ERROR, resp.context["form"].errors["__all__"])
+
+    def test_edit_responde_200_sin_cambiar_el_logo(self):
+        self.client.force_login(self.creador)
+        self.proyecto.logo_url = "https://example.com/logo-viejo.png"
+        self.proyecto.save(update_fields=["logo_url"])
+        with self._patch_fallo():
+            resp = self.client.post(
+                reverse("projects:project_edit", args=[self.proyecto.pk]),
+                {
+                    "nombre": self.proyecto.nombre,
+                    "descripcion": self.proyecto.descripcion,
+                    "logo_url": "",
+                    "estado": self.proyecto.estado,
+                    "logo": self._png("logo.png"),
+                },
+            )
+        self.assertEqual(resp.status_code, 200)
+        self.proyecto.refresh_from_db()
+        self.assertEqual(
+            self.proyecto.logo_url, "https://example.com/logo-viejo.png"
+        )
+        self.assertIn(self._ERROR, resp.context["form"].errors["__all__"])
