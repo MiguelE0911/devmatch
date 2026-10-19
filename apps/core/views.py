@@ -180,7 +180,12 @@ class FeedView(LoginRequiredMixin, View):
             .exclude(estado__in=ESTADOS_OCULTOS)
             .select_related("creador")
             .prefetch_related(VACANTES_ACTIVAS, LOGOS_PROYECTO)
-            .order_by("-actualizado_en", "-pk")
+            # Orden por fecha de publicación (creado_en), NO por actualizado_en:
+            # el trigger fn_set_updated_at reescribe actualizado_en en cada
+            # UPDATE, así que un simple backdate del seed dejaría a todos los
+            # proyectos con la misma marca y rompería tanto el orden escalonado
+            # como la etiqueta "publicado hace X" (que ya usa creado_en).
+            .order_by("-creado_en", "-pk")
         )
 
         estado = request.GET.get("estado")
