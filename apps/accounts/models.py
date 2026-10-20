@@ -194,6 +194,7 @@ class Habilidad(CatalogoBase):
 
     class Meta:
         db_table = "habilidades"
+        ordering = ["nombre"]
 
 
 class Tecnologia(CatalogoBase):
@@ -201,12 +202,14 @@ class Tecnologia(CatalogoBase):
 
     class Meta:
         db_table = "tecnologias"
+        ordering = ["nombre"]
 
 
 class Interes(CatalogoBase):
     # Interes NO tiene columna categoria en el SQL oficial.
     class Meta:
         db_table = "intereses"
+        ordering = ["nombre"]
 
 
 # ---------------------------------------------------------------------------

@@ -140,6 +140,16 @@ class CatalogoTests(TestCase):
         with self.assertRaises(IntegrityError):
             m.Habilidad.objects.create(nombre="Django")
 
+    def test_catalogos_se_ordenan_alfabeticamente_por_nombre(self):
+        for modelo in (m.Habilidad, m.Tecnologia, m.Interes):
+            with self.subTest(modelo=modelo.__name__):
+                modelo.objects.create(nombre="Zorro")
+                modelo.objects.create(nombre="Alfa")
+                modelo.objects.create(nombre="Medio")
+
+                nombres = list(modelo.objects.values_list("nombre", flat=True))
+                self.assertEqual(nombres, ["Alfa", "Medio", "Zorro"])
+
 
 class TablasPuenteTests(TestCase):
     def setUp(self):
