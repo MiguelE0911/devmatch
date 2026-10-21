@@ -5,16 +5,19 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import JsonResponse, Http404, HttpResponseRedirect
-from django.db.models import Q
+from django.db.models import Q, Prefetch
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
-from django.views.generic import CreateView, DetailView, UpdateView
+from django.views.generic import CreateView, DetailView, UpdateView, ListView
 from apps.matching.engine import calcular_match_score
 from apps.matching.models import ConfiguracionPesosMatching
-from apps.applications.services import construir_perfil_matching, construir_vacante_matching
+from apps.applications.services import (
+    construir_perfil_matching,
+    construir_vacante_matching,
+)
 from apps.applications.models import Postulacion
 
 from .forms import ProyectoForm, ProyectoMediaForm, VacanteForm
@@ -35,6 +38,9 @@ ESTADOS_POSTULACION_ACTIVA = (
     Postulacion.ESTADO_PENDIENTE,
     Postulacion.ESTADO_PRESELECCIONADA,
 )
+
+# Estados desde los que el dueño del proyecto puede rechazar a un candidato.
+ESTADOS_RECHAZABLES = ESTADOS_POSTULACION_ACTIVA
 
 
 TABS = ("vacantes", "descripcion", "galeria")
@@ -252,12 +258,12 @@ class ProyectoDetailView(DetailView):
         return qs.filter(Q(creador_id=usuario.id) | ~Q(estado__in=ESTADOS_OCULTOS))
 
     def get_object(self, queryset=None):
-            proyecto = super().get_object(queryset)
+        proyecto = super().get_object(queryset)
+        
+        if proyecto.estado == Proyecto.ESTADO_BORRADOR and proyecto.creador_id != self.request.user.id:
+            raise Http404("El proyecto no existe o aún es un borrador privado.")
             
-            if proyecto.estado == Proyecto.ESTADO_BORRADOR and proyecto.creador_id != self.request.user.id:
-                raise Http404("El proyecto no existe o aún es un borrador privado.")
-                
-            return proyecto
+        return proyecto
     
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -304,12 +310,13 @@ class VacancyCreateView(LoginRequiredMixin, CreateView):
                 request, "Solo el creador del proyecto puede agregar vacantes."
             )
             return redirect("projects:project_detail", pk=self.proyecto.pk)
+            
         if request.method in ("GET", "HEAD") and not puede_agregar_vacantes(
             self.proyecto
         ):
             messages.error(
                 request,
-                "No se pueden agregar vacantes a un proyecto en estado "
+                "No se pueden gestionar vacantes en un proyecto en estado "
                 f"«{self.proyecto.get_estado_display()}».",
             )
             return redirect(
@@ -333,7 +340,8 @@ class VacancyCreateView(LoginRequiredMixin, CreateView):
         form.instance.es_activo = True
         try:
             return super().form_valid(form)
-        except VacanteInvalida as exc:
+        # Sumamos ValidationError a la captura de excepciones
+        except (VacanteInvalida, ValidationError) as exc:
             # Regla de negocio del servicio (p. ej. proyecto finalizado o
             # cancelado, cupos, estado de vacante): se muestra como error no
             # de campo del formulario (200) y no se crea la vacante. El
@@ -379,6 +387,15 @@ class VacancyUpdateView(LoginRequiredMixin, UpdateView):
             return redirect(
                 "projects:project_detail", pk=vacante.proyecto.pk
             )
+            
+        if not puede_agregar_vacantes(vacante.proyecto):
+            messages.error(
+                request, 
+                "No se pueden editar vacantes en un proyecto en estado "
+                f"«{vacante.proyecto.get_estado_display()}»."
+            )
+            return redirect("projects:project_detail", pk=vacante.proyecto.pk)
+            
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
@@ -402,7 +419,7 @@ class VacancyUpdateView(LoginRequiredMixin, UpdateView):
     def form_valid(self, form):
         try:
             response = super().form_valid(form)
-        except VacanteInvalida as exc:
+        except (VacanteInvalida, ValidationError) as exc:
             form.add_error(None, str(exc))
             return self.form_invalid(form)
         messages.success(
@@ -441,6 +458,13 @@ class VacancyDeleteView(LoginRequiredMixin, View):
         if request.user.id != proyecto.creador_id:
             messages.error(
                 request, "Solo el creador del proyecto puede desactivar la vacante."
+            )
+            return redirect("projects:project_detail", pk=proyecto.pk)
+
+        if not puede_agregar_vacantes(proyecto):
+            messages.error(
+                request, 
+                "No se pueden eliminar vacantes si el proyecto ya finalizó o se canceló."
             )
             return redirect("projects:project_detail", pk=proyecto.pk)
 
@@ -774,3 +798,302 @@ class ProyectoCreateView(LoginRequiredMixin, CreateView):
 
     def get_success_url(self):
         return reverse("projects:project_detail", kwargs={"pk": self.object.pk})
+
+class MisProyectosListView(LoginRequiredMixin, ListView):
+    model = Proyecto
+    template_name = "projects/project_list.html"
+    context_object_name = "proyectos"
+    paginate_by = 6
+    page_kwarg = "pagina"
+
+    def get_queryset(self):
+        return (
+            Proyecto.objects.filter(
+                creador=self.request.user,
+                es_activo=True,
+            )
+            .prefetch_related(
+                # Los logos se piden filtrados (tipo + es_activo) y se dejan
+                # en `proyecto.logos` para no tener que filtrar en Python.
+                Prefetch(
+                    "media",
+                    queryset=ProyectoMedia.objects.filter(
+                        tipo=ProyectoMedia.TIPO_LOGO,
+                        es_activo=True,
+                    ),
+                    to_attr="logos",
+                ),
+                "vacantes__vacantetecnologiarequerida_set__tecnologia",
+                "vacantes__vacantehabilidadrequerida_set__habilidad",
+                # Postulaciones + postulante: sin esto la vista hace una
+                # consulta por cada postulación de cada vacante (N+1).
+                "vacantes__postulaciones__postulante",
+            )
+            .order_by("-creado_en")
+        )
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        
+        for proyecto in ctx["proyectos"]:
+            proyecto.clases_badge = badge_estado(proyecto)
+            proyecto.hace = hace_relativo(proyecto.creado_en)
+            
+            # Logo: primer adjunto de tipo 'logo'; si no hay, la URL pegada
+            # a mano en el proyecto. La plantilla cae a las iniciales.
+            logos = getattr(proyecto, "logos", [])
+            proyecto.url_logo = (
+                logos[0].archivo_url if logos else (proyecto.logo_url or "")
+            )
+            
+            vacantes_activas = [v for v in proyecto.vacantes.all() if v.es_activo]
+            proyecto.vacantes_list = vacantes_activas
+            
+            proyecto.cupos_ocupados_total = sum(v.cupos_ocupados for v in vacantes_activas)
+            proyecto.cupos_totales_total = sum(v.cupos_totales for v in vacantes_activas)
+            
+            tecnologias_unicas = {}
+            for vacante in vacantes_activas:
+                vacante.tech_list = [
+                    req.tecnologia for req in vacante.vacantetecnologiarequerida_set.all()
+                ]
+                vacante.hab_list = [
+                    req.habilidad for req in vacante.vacantehabilidadrequerida_set.all()
+                ]
+                for req in vacante.vacantetecnologiarequerida_set.all():
+                    tecnologias_unicas[req.tecnologia_id] = req.tecnologia
+
+                postulaciones_list = list(vacante.postulaciones.all())
+                for p in postulaciones_list:
+                    p.score_total = float(p.match_score) if p.match_score is not None else 0
+                    p.factores = p.match_factores
+
+                preseleccionados = [
+                    p for p in postulaciones_list
+                    if p.estado == Postulacion.ESTADO_PRESELECCIONADA
+                ]
+                pendientes = [
+                    p for p in postulaciones_list
+                    if p.estado == Postulacion.ESTADO_PENDIENTE
+                ]
+
+                vacante.postulaciones_list = postulaciones_list
+                vacante.postulaciones_preseleccionadas = preseleccionados
+                vacante.postulaciones_pendientes = pendientes
+                
+                vacante.total_postulaciones = len(pendientes)
+                vacante.total_preseleccionados = len(preseleccionados)
+            
+            proyecto.lista_tecnologias = list(tecnologias_unicas.values())
+
+            nombre_limpio = proyecto.nombre.replace("—", " ").replace("-", " ").strip()
+            palabras = [p for p in nombre_limpio.split() if p]
+            if len(palabras) >= 2:
+                proyecto.iniciales = (palabras[0][0] + palabras[1][0]).upper()
+            elif len(palabras) == 1:
+                proyecto.iniciales = palabras[0][:2].upper()
+            else:
+                proyecto.iniciales = "PR"
+
+        if ctx.get("is_paginated"):
+            paginator = ctx["paginator"]
+            page_obj = ctx["page_obj"]
+            rango_elidido = paginator.get_elided_page_range(page_obj.number, on_each_side=1, on_ends=1)
+            ctx["page_numbers"] = [str(x) if x != paginator.ELLIPSIS else "…" for x in rango_elidido]
+            query_dict = self.request.GET.copy()
+            if "pagina" in query_dict:
+                del query_dict["pagina"]
+            ctx["query_sin_pagina"] = query_dict.urlencode()
+            
+        return ctx
+
+
+def _nombre_candidato(usuario):
+    """Nombre legible del postulante: nombre completo o, si no hay, username."""
+    return usuario.get_full_name() or usuario.username
+
+
+class PreseleccionarPostulacionView(LoginRequiredMixin, View):
+    """Marca una postulación como preseleccionada.
+
+    Solo el dueño del proyecto puede hacerlo y solo desde el estado
+    'pendiente': una postulación ya decidida no se reabre. La plantilla
+    llama a esta vista por fetch, así que responde JSON; si llega sin la
+    cabecera XHR redirige con mensajes.
+    """
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        postulacion = get_object_or_404(
+            Postulacion.objects.select_related("vacante__proyecto", "postulante"),
+            pk=pk,
+        )
+        proyecto = postulacion.vacante.proyecto
+
+        if request.user.id != proyecto.creador_id:
+            return self._responder(
+                request, "No tienes permisos para realizar esta acción."
+            )
+
+        if postulacion.estado != Postulacion.ESTADO_PENDIENTE:
+            return self._responder(
+                request,
+                "Solo se pueden preseleccionar postulaciones en estado pendiente.",
+            )
+
+        postulacion.estado = Postulacion.ESTADO_PRESELECCIONADA
+        postulacion.decidido_por = request.user
+        postulacion.decidido_en = timezone.now()
+        postulacion.save(
+            update_fields=[
+                "estado",
+                "decidido_por",
+                "decidido_en",
+                "actualizado_en",
+            ]
+        )
+
+        messages.success(
+            request,
+            f"¡Has preseleccionado a {_nombre_candidato(postulacion.postulante)} "
+            "para la vacante!",
+        )
+        return self._responder(request)
+
+    @staticmethod
+    def _responder(request, error=""):
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            if error:
+                return JsonResponse({"error": error}, status=400)
+            return JsonResponse({"ok": True})
+        if error:
+            messages.error(request, error)
+        return redirect("projects:mis_proyectos")
+
+
+class AprobarPostulacionView(LoginRequiredMixin, View):
+    """Aprueba a un candidato preseleccionado y ocupa un cupo en la vacante.
+
+    La aceptación bloquea las filas implicadas (postulación y vacante) con
+    `select_for_update`, en ese orden, para que dos aprobaciones simultáneas
+    de la misma vacante no puedan ocupar dos veces el último cupo.
+
+    TODO(Etapa 3): el contador de cupos se incrementa a mano porque todavía
+    no existe la membresía de equipo. Cuando llegue `teams.EquipoMembresia`
+    hay que delegar en `applications.services.aceptar_postulacion()`, que
+    crea la membresía y deja que el trigger `trg_membresia_actualiza_cupos`
+    mantenga el contador y el estado de la vacante.
+    """
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        postulacion = get_object_or_404(
+            Postulacion.objects.select_related("vacante__proyecto", "postulante"),
+            pk=pk,
+        )
+        proyecto = postulacion.vacante.proyecto
+        destino = (
+            reverse("projects:project_detail", kwargs={"pk": proyecto.pk})
+            + "?tab=vacantes"
+        )
+
+        if request.user.id != proyecto.creador_id:
+            messages.error(request, "No tienes permisos para realizar esta acción.")
+            return redirect("projects:mis_proyectos")
+
+        with transaction.atomic():
+            postulacion = (
+                Postulacion.objects.select_for_update().get(pk=postulacion.pk)
+            )
+            vacante = Vacante.objects.select_for_update().get(pk=postulacion.vacante_id)
+
+            if postulacion.estado != Postulacion.ESTADO_PRESELECCIONADA:
+                messages.error(
+                    request,
+                    "Solo se pueden aprobar postulaciones que estén preseleccionadas.",
+                )
+                return redirect(destino)
+
+            if not vacante.es_activo or vacante.estado == Vacante.ESTADO_CANCELADA:
+                messages.error(request, "Esta vacante ya no está disponible.")
+                return redirect(destino)
+
+            if vacante.cupos_ocupados >= vacante.cupos_totales:
+                messages.error(request, "Esta vacante ya ha alcanzado su límite de cupos.")
+                return redirect(destino)
+
+            postulacion.estado = Postulacion.ESTADO_ACEPTADA
+            postulacion.decidido_por = request.user
+            postulacion.decidido_en = timezone.now()
+            postulacion.save(
+                update_fields=[
+                    "estado",
+                    "decidido_por",
+                    "decidido_en",
+                    "actualizado_en",
+                ]
+            )
+
+            # TODO(Etapa 3): reemplazar por applications.services.aceptar_postulacion()
+            vacante.cupos_ocupados += 1
+            # El trigger de la base pone la vacante en 'cubierta' al llenarse
+            # los cupos; hasta que exista la membresía de equipo lo mantenemos
+            # nosotros con la misma regla.
+            if vacante.cupos_ocupados >= vacante.cupos_totales:
+                vacante.estado = Vacante.ESTADO_CUBIERTA
+            vacante.save(
+                update_fields=["cupos_ocupados", "estado", "actualizado_en"]
+            )
+
+        messages.success(
+            request,
+            f"¡Has aprobado a {_nombre_candidato(postulacion.postulante)}! "
+            "El cupo ha sido ocupado.",
+        )
+        return redirect(destino)
+
+
+class RechazarPostulacionView(LoginRequiredMixin, View):
+    """Rechaza una postulación pendiente o preseleccionada.
+
+    La plantilla la llama por fetch, así que responde JSON. El rechazo no
+    borra la fila (trigger `trg_bloquear_borrado_postulaciones`) ni libera
+    cupos: solo cambia el estado y deja constancia de quién decidió. Como
+    el estado deja de ser 'pendiente'/'preseleccionada', el índice único
+    `ux_postulacion_activa_unica` vuelve a permitir que el candidato se
+    postule a esa vacante.
+    """
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        postulacion = get_object_or_404(
+            Postulacion.objects.select_related("vacante__proyecto", "postulante"),
+            pk=pk,
+        )
+        proyecto = postulacion.vacante.proyecto
+
+        if request.user.id != proyecto.creador_id:
+            return JsonResponse({"error": "No autorizado"}, status=403)
+
+        if postulacion.estado not in ESTADOS_RECHAZABLES:
+            return JsonResponse(
+                {
+                    "error": "Solo se pueden rechazar postulaciones pendientes "
+                    "o preseleccionadas."
+                },
+                status=400,
+            )
+
+        postulacion.estado = Postulacion.ESTADO_RECHAZADA
+        postulacion.decidido_por = request.user
+        postulacion.decidido_en = timezone.now()
+        postulacion.save(
+            update_fields=[
+                "estado",
+                "decidido_por",
+                "decidido_en",
+                "actualizado_en",
+            ]
+        )
+
+        return JsonResponse({"ok": True})

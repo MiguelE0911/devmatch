@@ -14,7 +14,7 @@
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="mt-0.5 h-4 w-4 shrink-0">
                 <path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003ZM12 8.25a.75.75 0 0 1 .75.75v3.75a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z" clip-rule="evenodd"/>
             </svg>
-            <span>No se pueden añadir vacantes a un proyecto en estado
+            <span>No se pueden gestionar vacantes en un proyecto en estado
                 <span class="font-semibold">«{{ proyecto.get_estado_display }}»</span>.</span>
         </div>
     {% endif %}
@@ -26,7 +26,7 @@
                 <div class="flex items-start gap-7">
                     {# Estado del cupo: UN solo ícono (evita la repetición visual). #}
                     <div class="flex w-14 shrink-0 flex-col items-center gap-2">
-                        {% if vacante.cupos_libres > 0 %}
+                        {% if vacante.tiene_cupo %}
                             <div class="flex h-11 w-11 items-center justify-center rounded-full bg-violet-100 text-base font-bold text-violet-700"
                                  title="{{ vacante.cupos_libres }} cupos disponibles">
                                 <span>?</span>
@@ -50,7 +50,7 @@
                                 <span class="shrink-0 rounded-full bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">
                                     {{ vacante.cupos_ocupados }}/{{ vacante.cupos_totales }} cupos
                                 </span>
-                                {% if es_dueno %}
+                                {% if es_dueno and vacante.is_abierta %}
                                     <div class="relative shrink-0" data-menu>
                                         <button type="button" data-menu-toggle aria-haspopup="true" aria-expanded="false"
                                                 aria-label="Opciones de {{ vacante.titulo }}"
@@ -145,17 +145,51 @@
                     <!-- Botón Postularme -->
                     <div>
                         {% if vacante.puede_postularse %}
-                            <form action="{% url 'applications:postular' vacante.pk %}" method="POST" class="inline">
-                                {% csrf_token %}
-                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                <button type="submit" onclick="return confirm('¿Enviar tu postulación a «{{ vacante.titulo }}»? Tu Match Score se calculará con tu perfil actual.');"
-                                        class="inline-flex items-center gap-2 rounded-full bg-violet-700 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-violet-800">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4">
-                                        <path fill-rule="evenodd" d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" clip-rule="evenodd"/>
-                                    </svg>
-                                    Postularme
-                                </button>
-                            </form>
+                            <!-- Botón que abre el modal de confirmación específico de esta vacante -->
+                            <button type="button" data-modal-toggle="modal-confirmar-{{ vacante.pk }}"
+                                    class="inline-flex items-center gap-2 rounded-full bg-violet-700 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-violet-800">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4">
+                                    <path fill-rule="evenodd" d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" clip-rule="evenodd"/>
+                                </svg>
+                                Postularme
+                            </button>
+
+                            <!-- MODAL DE CONFIRMACIÓN (Estilo exacto del prototipo) -->
+                            <div id="modal-confirmar-{{ vacante.pk }}" class="fixed inset-0 z-[10000] hidden items-center justify-center bg-slate-900/40 p-4 font-montserrat backdrop-blur-sm">
+                                <div class="relative w-full max-w-lg rounded-3xl bg-white p-8 text-center shadow-2xl">
+                                    
+                                    <!-- Ícono superior del modal -->
+                                    <div class="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-violet-50 text-violet-700">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="h-10 w-10">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
+                                        </svg>
+                                    </div>
+
+                                    <!-- Textos de confirmación -->
+                                    <h3 class="mt-6 text-xl font-bold text-slate-900">
+                                        ¿Estás seguro de postularte a <span class="text-violet-700">{{ proyecto.nombre }}</span>?
+                                    </h3>
+                                    
+                                    <p class="mt-2 text-sm font-medium text-slate-500">
+                                        Vacante: <span class="font-semibold text-slate-700">{{ vacante.titulo }}</span>
+                                    </p>
+
+                                    <!-- Formulario con los botones de acción -->
+                                    <form method="post" action="{% url 'applications:postular' vacante.pk %}" class="mt-8 flex items-center justify-center gap-4">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                        <button type="button" data-modal-close="modal-confirmar-{{ vacante.pk }}"
+                                                class="w-1/2 rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50">
+                                            Cancelar
+                                        </button>
+                                        <button type="submit"
+                                                class="w-1/2 rounded-full bg-violet-700 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-violet-800 shadow-sm">
+                                            Sí, postularme
+                                        </button>
+                                    </form>
+
+                                </div>
+                            </div>
                         {% else %}
                             <button type="button" disabled title="{{ vacante.motivo_no_postularse }}"
                                     class="inline-flex cursor-not-allowed items-center gap-2 rounded-full bg-slate-300 px-6 py-3 text-sm font-semibold text-white">

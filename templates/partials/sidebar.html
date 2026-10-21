@@ -10,6 +10,7 @@ defina las rutas.
 {% with ns=request.resolver_match.namespace|default:"" %}
 <aside class="sticky top-16 z-20 hidden h-[calc(100vh-4rem)] w-[125px] shrink-0 border-r border-violet-100 bg-paper md:block">
     <nav class="flex h-full flex-col items-center gap-7 overflow-y-auto py-8">
+        
         <a href="{% url 'core:feed' %}" class="group flex w-full flex-col items-center gap-1.5" title="Home">
             <span class="flex h-11 w-11 items-center justify-center rounded-[14px] transition-colors {% if ns == 'core' %}bg-violet-700 text-white group-hover:bg-violet-800{% else %}text-violet-700 group-hover:bg-violet-100{% endif %}">
                 <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -20,7 +21,7 @@ defina las rutas.
             <span class="text-xs font-bold text-violet-700">Home</span>
         </a>
 
-        <a href="#" class="group flex w-full flex-col items-center gap-1.5" title="Proyectos">
+        <a href="{% url 'projects:mis_proyectos' %}" class="group flex w-full flex-col items-center gap-1.5" title="Proyectos">
             <span class="flex h-11 w-11 items-center justify-center rounded-[14px] transition-colors {% if ns == 'projects' %}bg-violet-700 text-white group-hover:bg-violet-800{% else %}text-violet-700 group-hover:bg-violet-100{% endif %}">
                 <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9L9.2 3.9A2 2 0 0 0 7.5 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>

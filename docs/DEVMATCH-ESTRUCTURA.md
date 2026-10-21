@@ -26,7 +26,7 @@ devmatch/
 │   └── asgi.py
 ├── apps/
 │   ├── core/                    # [ETAPA 1 - real] mixins, permisos por rol, utilidades
-│   │   ├── views.py             # home / health-check de conexión a DB
+│   │   ├── views.py             # home / feed de proyectos
 │   │   ├── urls.py              # ruta base "" → core:home
 │   │   ├── mixins.py
 │   │   ├── permissions.py
@@ -134,7 +134,7 @@ devmatch/
 ├── apps/
 │   ├── core/
 │   │   ├── __init__.py
-│   │   ├── views.py             # home / health-check de conexión a DB
+│   │   ├── views.py             # home / feed de proyectos
 │   │   ├── urls.py              # ruta base "" → core:home
 │   │   ├── mixins.py
 │   │   ├── permissions.py
