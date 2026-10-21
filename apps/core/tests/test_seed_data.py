@@ -1,5 +1,7 @@
 """
-Fechas escalonadas de seed_data: orden, secuencia y ausencia de fechas futuras.
+Fechas escalonadas de seed_data: orden, secuencia y ausencia de fechas futuras,
+más invariantes de estado (tarjeta #36): el seed nunca deja vacantes abiertas
+ni interacciones activas en proyectos cerrados, ni destruye vacantes 'cubierta'.
 
 Ejecuta el comando contra la base de PRUEBAS de Django (nunca contra Neon) con
 el reloj fijado, así que no depende de la hora a la que se corra.
@@ -9,11 +11,13 @@ from io import StringIO
 from unittest import mock
 
 from django.core.management import call_command
+from django.db.models import F
 from django.test import TestCase
 from django.utils import timezone
 
 from apps.accounts.models import Usuario
 from apps.applications.models import Postulacion
+from apps.projects import services as services_proyectos
 from apps.projects.models import Proyecto, Vacante
 from apps.teams.models import EquipoMembresia, Invitacion
 
@@ -21,6 +25,7 @@ from apps.teams.models import EquipoMembresia, Invitacion
 DIAS_POR_PROYECTO = {
     "ResuMate": 3,
     "BrainTwist": 10,
+    "DevNotes": 14,
     "PetMatch": 18,
     "GymLog": 27,
     "ClinVis": 40,
@@ -81,8 +86,8 @@ class SeedFechasTests(TestCase):
         """El seed ignora en silencio los errores de membresías e invitaciones;
         esto evita que los demás tests pasen sobre una siembra incompleta."""
         self.assertEqual(Usuario.objects.count(), 5)
-        self.assertEqual(Proyecto.objects.count(), 9)
-        self.assertEqual(Vacante.objects.count(), 8)
+        self.assertEqual(Proyecto.objects.count(), 10)
+        self.assertEqual(Vacante.objects.count(), 9)
         self.assertEqual(Postulacion.objects.count(), 10)
         self.assertEqual(Invitacion.objects.count(), 1)
         self.assertEqual(EquipoMembresia.objects.count(), 4)
@@ -170,3 +175,108 @@ class SeedFechasTests(TestCase):
 
         correr_seed(self.ahora)
         self.assertEqual(tomar_fechas(), antes)
+
+
+class SeedInvariantesEstadoTests(TestCase):
+    """Invariantes de la tarjeta #36: el seed no produce variaciones que los
+    gates actuales de estado impiden reproducir en la interfaz."""
+
+    CERRADOS = (Proyecto.ESTADO_FINALIZADO, Proyecto.ESTADO_CANCELADO)
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.ahora = timezone.now()
+        correr_seed(cls.ahora)
+
+    def test_no_hay_vacantes_abiertas_en_proyectos_cerrados(self):
+        imposibles = Vacante.objects.filter(
+            estado=Vacante.ESTADO_ABIERTA,
+            proyecto__estado__in=self.CERRADOS,
+        )
+        self.assertFalse(imposibles.exists(), list(imposibles))
+
+    def test_no_hay_interacciones_activas_en_proyectos_cerrados(self):
+        activas = Postulacion.objects.filter(
+            estado__in=[Postulacion.ESTADO_PENDIENTE, Postulacion.ESTADO_PRESELECCIONADA],
+            vacante__proyecto__estado__in=self.CERRADOS,
+        )
+        self.assertFalse(activas.exists(), list(activas))
+
+    def test_borrador_seediado_con_vacante_abierta(self):
+        borrador = Proyecto.objects.get(nombre__startswith="DevNotes")
+        self.assertEqual(borrador.estado, Proyecto.ESTADO_BORRADOR)
+        vacante = Vacante.objects.get(proyecto=borrador)
+        self.assertEqual(vacante.estado, Vacante.ESTADO_ABIERTA)
+        self.assertEqual(vacante.cupos_totales, 1)
+
+    def test_doble_corrida_no_descubre_vacantes_llenas(self):
+        """La 2ª corrida no fuerza 'abierta' sobre vacantes llenadas por el
+        trigger de cupos (GymLog 1/1 y BrainTwist QA 1/1)."""
+        gymlog = Vacante.objects.get(
+            proyecto__nombre__startswith="GymLog", titulo="Frontend Developer"
+        )
+        qa = Vacante.objects.get(
+            proyecto__nombre__startswith="BrainTwist", titulo="QA / Testing"
+        )
+        self.assertEqual(gymlog.estado, Vacante.ESTADO_CUBIERTA)
+        self.assertEqual(qa.estado, Vacante.ESTADO_CUBIERTA)
+
+        correr_seed(self.ahora)
+
+        gymlog.refresh_from_db()
+        qa.refresh_from_db()
+        self.assertEqual(gymlog.estado, Vacante.ESTADO_CUBIERTA)
+        self.assertEqual(qa.estado, Vacante.ESTADO_CUBIERTA)
+        self.assertFalse(
+            Vacante.objects.filter(
+                estado=Vacante.ESTADO_ABIERTA,
+                cupos_ocupados__gte=F("cupos_totales"),
+            ).exists()
+        )
+
+    def test_drift_a_terminal_no_crash_y_normaliza(self):
+        """Proyecto seed que cayó en estado terminal (p. ej. reset manual en
+        Neon): no se revierte ni se reactiva, y sus vacantes abiertas (incluida
+        una fila legada) se normalizan a 'cancelada' sin abortar el seed."""
+        petmatch = Proyecto.objects.get(nombre__startswith="PetMatch")
+        services_proyectos.cambiar_estado(petmatch, Proyecto.ESTADO_CANCELADO)
+        legada = Vacante.objects.create(
+            proyecto=petmatch,
+            titulo="Legacy Abierta",
+            descripcion="Vacante legada que el seed no debe dejar abierta.",
+            cupos_totales=1,
+            estado=Vacante.ESTADO_ABIERTA,
+        )
+
+        correr_seed(self.ahora)  # no debe lanzar TransicionEstadoInvalida
+
+        petmatch.refresh_from_db()
+        legada.refresh_from_db()
+        self.assertEqual(petmatch.estado, Proyecto.ESTADO_CANCELADO)
+        self.assertEqual(legada.estado, Vacante.ESTADO_CANCELADA)
+        self.assertFalse(
+            Vacante.objects.filter(
+                proyecto=petmatch, estado=Vacante.ESTADO_ABIERTA
+            ).exists()
+        )
+
+    def test_drift_invalido_no_crash_ni_rollback(self):
+        """Drift que la matriz no permite revertir al fixture (p. ej.
+        en_desarrollo vs fixture 'publicado'): el seed avisa y conserva el
+        estado actual sin abortar la corrida completa."""
+        brain = Proyecto.objects.get(nombre__startswith="BrainTwist")
+        for estado in (
+            Proyecto.ESTADO_RECLUTANDO,
+            Proyecto.ESTADO_EQUIPO_COMPLETO,
+            Proyecto.ESTADO_EN_DESARROLLO,
+        ):
+            services_proyectos.cambiar_estado(brain, estado)
+
+        correr_seed(self.ahora)  # no debe lanzar ni hacer rollback
+
+        brain.refresh_from_db()
+        self.assertEqual(brain.estado, Proyecto.ESTADO_EN_DESARROLLO)
+        # El resto del seed sí se aplicó: el borrador sigue intacto.
+        self.assertTrue(
+            Proyecto.objects.filter(nombre__startswith="DevNotes").exists()
+        )
