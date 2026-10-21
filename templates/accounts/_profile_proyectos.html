@@ -14,7 +14,7 @@ enlace al detalle. Solo los activos (es_activo=True) — DEVMATCH-BD sección 9.
         <ul class="space-y-4">
             {% for proyecto in proyectos %}
                 <li>
-                    <a href="{% url 'projects:project_detail' proyecto.pk %}"
+                    <a href="{% url 'projects:project_detail' proyecto.pk %}?next={{ request.get_full_path|urlencode }}"
                        class="flex items-center gap-4 rounded-[20px] p-3 transition-colors hover:bg-[#F8F7FF]">
                         <span class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[14px] bg-violet-100 text-violet-700">
                             {% if proyecto.logo_url %}

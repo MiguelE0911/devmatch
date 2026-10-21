@@ -2,18 +2,30 @@ import json
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.http import JsonResponse, Http404
+from django.http import JsonResponse, Http404, HttpResponseRedirect
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 from django.views.generic import CreateView, DetailView, UpdateView
+from apps.matching.engine import calcular_match_score
+from apps.matching.models import ConfiguracionPesosMatching
+from apps.applications.services import construir_perfil_matching, construir_vacante_matching
 
 from .forms import ProyectoForm, ProyectoMediaForm, VacanteForm
 from .models import Proyecto, ProyectoMedia, Vacante
-from .services import TRANSICIONES_VALIDAS
+from .services import (
+    ESTADOS_CERRADOS,
+    TRANSICIONES_VALIDAS,
+    VacanteInvalida,
+    cambiar_estado,
+    puede_agregar_imagenes,
+    puede_agregar_vacantes,
+)
 
 
 TABS = ("vacantes", "descripcion", "galeria")
@@ -46,6 +58,24 @@ def badge_estado(proyecto):
 
 def _plural(n, singular, plural):
     return singular if n == 1 else plural
+
+
+def url_volver(request, defecto):
+    """Destino del botón "Volver".
+
+    Prioriza un `?next=` interno (evita open redirect con
+    `url_has_allowed_host_and_scheme`) y, si no hay o es externo, usa
+    `defecto`. Reemplaza al viejo `history.back()`, que reabría pasos
+    intermedios del historial (p. ej. el modal de creación).
+    """
+    candidato = request.GET.get("next", "")
+    if candidato and url_has_allowed_host_and_scheme(
+        candidato,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return candidato
+    return defecto
 
 
 def hace_relativo(instante):
@@ -87,6 +117,21 @@ def datos_laterales(proyecto, usuario):
     habilidades, tecnologias = [], []
     cupos_ocupados_total = cupos_totales_total = 0
 
+    # Preparamos el perfil y los pesos una sola vez si el usuario puede ver el Match Score
+    perfil_matching = None
+    pesos = None
+    if usuario.is_authenticated and not es_dueno:
+        pesos_activos = ConfiguracionPesosMatching.objects.filter(es_activo=True).first()
+        if pesos_activos:
+            pesos = {
+                "habilidades": float(pesos_activos.peso_habilidades),
+                "nivel": float(pesos_activos.peso_nivel),
+                "tecnologias": float(pesos_activos.peso_tecnologias),
+                "experiencia": float(pesos_activos.peso_experiencia),
+                "disponibilidad": float(pesos_activos.peso_disponibilidad),
+            }
+            perfil_matching = construir_perfil_matching(usuario)
+
     for vacante in vacantes:
         vacante.habilidades = [
             r.habilidad
@@ -108,12 +153,37 @@ def datos_laterales(proyecto, usuario):
             if vacante.cupos_totales
             else 0
         )
-        # El botón "Postularme" se habilita solo si hay cupo, no es el dueño
-        # y no está ya postulado (lo de "ya postulado" llega con el modelo de
-        # postulaciones, Etapa 2). La vista Dueño lo mantiene deshabilitado.
+        # El botón "Postularme" se habilita solo si hay cupo, no es el dueño,
+        # el proyecto sigue abierto (finalizado/cancelado ya no reclutan) y la
+        # vacante está abierta. El mensaje del botón deshabilitado explica por
+        # qué. La vista Dueño lo mantiene deshabilitado.
+        proyecto_abierto = proyecto.estado not in ESTADOS_CERRADOS
         vacante.puede_postularse = (
-            usuario.is_authenticated and not es_dueno and vacante.cupos_libres > 0
+            usuario.is_authenticated
+            and not es_dueno
+            and proyecto_abierto
+            and vacante.cupos_libres > 0
+            and vacante.estado == Vacante.ESTADO_ABIERTA
         )
+        if not proyecto_abierto:
+            vacante.motivo_no_postularse = (
+                "El proyecto ya no está abierto a postulaciones"
+            )
+        elif es_dueno:
+            vacante.motivo_no_postularse = "Eres el creador de este proyecto"
+        elif not usuario.is_authenticated:
+            vacante.motivo_no_postularse = "Inicia sesión para postularte"
+        else:
+            vacante.motivo_no_postularse = "Publicación completa"
+
+        # Calculamos y anexamos el Match Score dinámicamente a la vacante
+        vacante.score_total = None
+        vacante.factores = None
+        if perfil_matching and pesos:
+            vacante_matching = construir_vacante_matching(vacante)
+            score_total, factores = calcular_match_score(perfil_matching, vacante_matching, pesos)
+            vacante.score_total = score_total
+            vacante.factores = factores
 
         for habilidad in vacante.habilidades:
             if habilidad not in habilidades:
@@ -143,8 +213,11 @@ def datos_laterales(proyecto, usuario):
         "cupos_totales_total": cupos_totales_total,
         "logo": logo,
         "prototipos": prototipos,
+        # Un proyecto finalizado/cancelado ya no admite vacantes nuevas: la
+        # tab de vacantes oculta el CTA "Añadir vacante" y VacancyCreateView
+        # rechaza la URL directa (ver services.puede_agregar_vacantes).
+        "puede_agregar_vacantes": puede_agregar_vacantes(proyecto),
     }
-
 
 class ProyectoDetailView(DetailView):
     """Detalle de un proyecto con 3 tabs (?tab=vacantes|descripcion|galeria)."""
@@ -183,12 +256,24 @@ class ProyectoDetailView(DetailView):
         ctx["con_descripcion"] = True
         ctx["estado_badge"] = badge_estado(proyecto)
         ctx["publicado_hace"] = hace_relativo(proyecto.creado_en)
+        ctx["volver"] = url_volver(
+            self.request, reverse("core:feed")
+        )
         ctx.update(datos_laterales(proyecto, usuario))
         return ctx
 
 
 class VacancyCreateView(LoginRequiredMixin, CreateView):
-    """Alta de vacante sobre un proyecto. Solo el creador del proyecto."""
+    """Alta de vacante sobre un proyecto. Solo el creador del proyecto.
+
+    Solo se permite mientras el proyecto no esté cerrado (finalizado o
+    cancelado) — ver `services.puede_agregar_vacantes`. El gate de navegación
+    vive en `dispatch` y corta solo GET/HEAD: el POST llega siempre al
+    formulario, que delega en `services.crear_vacante`; si el proyecto está
+    cerrado el servicio lanza `ProyectoNoAceptaVacantes` y `form_valid` la
+    muestra como error no de campo (200). El servicio es la fuente de verdad
+    (regla del PR #10).
+    """
 
     form_class = VacanteForm
     template_name = "projects/vacancy_form.html"
@@ -202,6 +287,20 @@ class VacancyCreateView(LoginRequiredMixin, CreateView):
                 request, "Solo el creador del proyecto puede agregar vacantes."
             )
             return redirect("projects:project_detail", pk=self.proyecto.pk)
+        if request.method in ("GET", "HEAD") and not puede_agregar_vacantes(
+            self.proyecto
+        ):
+            messages.error(
+                request,
+                "No se pueden agregar vacantes a un proyecto en estado "
+                f"«{self.proyecto.get_estado_display()}».",
+            )
+            return redirect(
+                reverse(
+                    "projects:project_detail", kwargs={"pk": self.proyecto.pk}
+                )
+                + "?tab=vacantes"
+            )
         return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
@@ -215,7 +314,16 @@ class VacancyCreateView(LoginRequiredMixin, CreateView):
     def form_valid(self, form):
         form.instance.proyecto = self.proyecto
         form.instance.es_activo = True
-        return super().form_valid(form)
+        try:
+            return super().form_valid(form)
+        except VacanteInvalida as exc:
+            # Regla de negocio del servicio (p. ej. proyecto finalizado o
+            # cancelado, cupos, estado de vacante): se muestra como error no
+            # de campo del formulario (200) y no se crea la vacante. El
+            # servicio relee el proyecto con select_for_update dentro de su
+            # transacción, así que no hace falta revalidar aquí.
+            form.add_error(None, str(exc))
+            return self.form_invalid(form)
 
     def get_success_url(self):
         # El modelo Proyecto (Squad A) no define get_absolute_url; armamos la
@@ -275,10 +383,15 @@ class VacancyUpdateView(LoginRequiredMixin, UpdateView):
         return ctx
 
     def form_valid(self, form):
+        try:
+            response = super().form_valid(form)
+        except VacanteInvalida as exc:
+            form.add_error(None, str(exc))
+            return self.form_invalid(form)
         messages.success(
             self.request, "Vacante actualizada correctamente."
         )
-        return super().form_valid(form)
+        return response
 
     def get_success_url(self):
         return (
@@ -332,9 +445,9 @@ class ProyectoGaleriaEditView(LoginRequiredMixin, CreateView):
     """Editor de la galería del proyecto (imágenes tipo `prototipo`).
 
     Espejo de `VacancyCreateView`: la página combina el form de alta de una
-    imagen (por URL, sin Pillow todavía) con la lista de imágenes activas y su
-    acción de desactivar. La "subida" es una URL en `archivo_url` (TEXT), igual
-    que `logo_url` — el procesado con Pillow llega como valor agregado.
+    imagen (subida de archivo procesada con Pillow, o URL) con la lista de
+    imágenes activas y su acción de desactivar. El valor final siempre queda
+    en `archivo_url` (ruta relativa /media/... o URL externa).
     """
 
     form_class = ProyectoMediaForm
@@ -351,6 +464,19 @@ class ProyectoGaleriaEditView(LoginRequiredMixin, CreateView):
             return redirect("projects:project_detail", pk=self.proyecto.pk)
         return super().dispatch(request, *args, **kwargs)
 
+    def post(self, request, *args, **kwargs):
+        # Solo se bloquea el ALTA de imágenes (un proyecto cancelado no admite
+        # nuevas capturas). El dueño puede seguir entrando a la página para
+        # eliminar o reordenar las imágenes que ya existían.
+        if not puede_agregar_imagenes(self.proyecto):
+            messages.error(
+                request,
+                "No se pueden añadir imágenes a un proyecto en estado "
+                f"«{self.proyecto.get_estado_display()}».",
+            )
+            return redirect(self.get_success_url())
+        return super().post(request, *args, **kwargs)
+
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs["proyecto"] = self.proyecto
@@ -362,14 +488,31 @@ class ProyectoGaleriaEditView(LoginRequiredMixin, CreateView):
         ctx["es_dueno"] = True
         ctx["estado_badge"] = badge_estado(self.proyecto)
         ctx.update(datos_laterales(self.proyecto, self.request.user))
+        ctx["puede_agregar_imagenes"] = puede_agregar_imagenes(self.proyecto)
         return ctx
 
     def form_valid(self, form):
+        self.proyecto.refresh_from_db(fields=["estado"])
+        if not puede_agregar_imagenes(self.proyecto):
+            messages.error(
+                self.request,
+                "No se pueden añadir imágenes a un proyecto en estado "
+                f"«{self.proyecto.get_estado_display()}».",
+            )
+            return redirect(self.get_success_url())
         form.instance.proyecto = self.proyecto
         form.instance.tipo = ProyectoMedia.TIPO_PROTOTIPO
         form.instance.es_activo = True
+        try:
+            with transaction.atomic():
+                self.object = super().form_valid(form)
+        except ValidationError as exc:
+            # Fallo del storage al guardar la imagen (media_utils): la fila no
+            # se crea y el formulario re-renderiza con el error.
+            form.add_error(None, exc)
+            return self.form_invalid(form)
         messages.success(self.request, "La imagen se subió correctamente.")
-        return super().form_valid(form)
+        return self.object
 
     def get_success_url(self):
         return (
@@ -496,8 +639,14 @@ class ProyectoEditView(LoginRequiredMixin, UpdateView):
         return ctx
 
     def form_valid(self, form):
+        try:
+            with transaction.atomic():
+                response = super().form_valid(form)
+        except ValidationError as exc:
+            form.add_error(None, exc)
+            return self.form_invalid(form)
         messages.success(self.request, "Proyecto actualizado correctamente.")
-        return super().form_valid(form)
+        return response
 
     def get_success_url(self):
         return reverse("projects:project_detail", kwargs={"pk": self.object.pk})
@@ -524,8 +673,12 @@ class ProyectoDeleteView(LoginRequiredMixin, View):
             return redirect("projects:project_detail", pk=proyecto.pk)
 
         if Proyecto.ESTADO_CANCELADO in TRANSICIONES_VALIDAS.get(proyecto.estado, set()):
-            proyecto.estado = Proyecto.ESTADO_CANCELADO
-            proyecto.cancelado_en = timezone.now()
+            # Usar el servicio en lugar de asignar el estado a mano: además de
+            # validar la transición y registrar cancelado_en, cierra las
+            # vacantes que queden 'abiertas' (cerrar_vacantes_abiertas) —
+            # revisión: un proyecto cancelado no puede seguir con vacantes
+            # postulables.
+            cambiar_estado(proyecto, Proyecto.ESTADO_CANCELADO)
 
         proyecto.es_activo = False
         proyecto.desactivado_en = timezone.now()
@@ -541,30 +694,66 @@ class ProyectoDeleteView(LoginRequiredMixin, View):
         return redirect("core:home")
 
 class ProyectoCreateView(LoginRequiredMixin, CreateView):
-    """Creación de un nuevo proyecto desde el modal."""
+    """Creación de un nuevo proyecto.
+
+    Responde la página completa al acceso directo y el fragmento del modal
+    (`_project_create_modal.html`) cuando la petición es AJAX
+    (X-Requested-With), para que static/js/project-modal.js lo inyecte sin
+    recargar. Un POST AJAX válido devuelve JSON con la URL de destino; uno
+    inválido, el fragmento con los errores y status 422.
+    """
 
     model = Proyecto
     form_class = ProyectoForm
     template_name = "projects/project_create.html"
+
+    def _es_ajax(self):
+        return self.request.headers.get("x-requested-with") == "XMLHttpRequest"
+
+    def get_template_names(self):
+        if self._es_ajax():
+            return ["projects/_project_create_modal.html"]
+        return [self.template_name]
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         # La X / Cancelar del modal vuelven a la vista previa del shell
         # (?next llega desde parciales/sidebar) o al feed interno por defecto —
         # nunca a la landing. Solo se aceptan URLs internas (open redirect).
+        # `volver_next` se re-emite en el action del form para que el modal
+        # siga cerrándose bien tras un error de validación.
         next_url = self.request.GET.get("next", "")
-        ctx["volver"] = (
-            next_url
-            if next_url.startswith("/") and not next_url.startswith("//")
-            else reverse("core:feed")
+        interno = bool(next_url) and url_has_allowed_host_and_scheme(
+            next_url,
+            allowed_hosts={self.request.get_host()},
+            require_https=self.request.is_secure(),
         )
+        ctx["volver"] = next_url if interno else reverse("core:feed")
+        ctx["volver_next"] = next_url if interno else ""
         return ctx
 
     def form_valid(self, form):
         form.instance.creador = self.request.user
         form.instance.es_activo = True
+        try:
+            with transaction.atomic():
+                self.object = form.save()
+        except ValidationError as exc:
+            # Fallo del storage al subir el logo: rollback (no queda proyecto
+            # a medias) y el error como non-field error, sin duplicar al
+            # reintentar.
+            form.add_error(None, exc)
+            return self.form_invalid(form)
         messages.success(self.request, "¡Proyecto creado exitosamente!")
-        return super().form_valid(form)
+        if self._es_ajax():
+            return JsonResponse({"ok": True, "redirect": self.get_success_url()})
+        return HttpResponseRedirect(self.get_success_url())
+
+    def form_invalid(self, form):
+        response = super().form_invalid(form)
+        if self._es_ajax():
+            response.status_code = 422
+        return response
 
     def get_success_url(self):
         return reverse("projects:project_detail", kwargs={"pk": self.object.pk})
