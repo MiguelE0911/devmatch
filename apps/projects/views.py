@@ -20,6 +20,7 @@ from apps.applications.models import Postulacion
 from .forms import ProyectoForm, ProyectoMediaForm, VacanteForm
 from .models import Proyecto, ProyectoMedia, Vacante
 from .services import (
+    ESTADO_BADGE,
     ESTADOS_CERRADOS,
     TRANSICIONES_VALIDAS,
     VacanteInvalida,
@@ -49,15 +50,7 @@ ESTADOS_OCULTOS = (Proyecto.ESTADO_BORRADOR, Proyecto.ESTADO_CANCELADO)
 # estados usa un color DIFERENTE (spec: "cada uno con un color diferente").
 # `cancelado` NO se ofrece como opción editable: se le asigna automáticamente
 # al dueño cuando intenta borrar el proyecto (lo aplica `ProyectoDeleteView`).
-ESTADO_BADGE = {
-    Proyecto.ESTADO_BORRADOR: "bg-slate-100 text-slate-600",
-    Proyecto.ESTADO_PUBLICADO: "bg-violet-100 text-violet-700",
-    Proyecto.ESTADO_RECLUTANDO: "bg-green-100 text-green-700",
-    Proyecto.ESTADO_EQUIPO_COMPLETO: "bg-cyan-100 text-cyan-700",
-    Proyecto.ESTADO_EN_DESARROLLO: "bg-amber-100 text-amber-700",
-    Proyecto.ESTADO_FINALIZADO: "bg-emerald-100 text-emerald-700",
-    Proyecto.ESTADO_CANCELADO: "bg-rose-100 text-rose-600",
-}
+# El mapeo vive en `services.ESTADO_BADGE` para que `applications` lo reuse.
 
 
 def badge_estado(proyecto):

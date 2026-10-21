@@ -16,8 +16,60 @@ from apps.applications.services import (
     crear_postulacion,
 )
 from apps.projects.models import Proyecto, Vacante
+from apps.projects.services import ESTADO_BADGE, ESTADOS_PROYECTO_NO_PUBLICABLE
 
 ESTADOS_RETIRABLES = (Postulacion.ESTADO_PENDIENTE, Postulacion.ESTADO_PRESELECCIONADA)
+
+# Una postulación "abierta" (pendiente/preseleccionada) es la única que
+# bloquea al postulante: mientras lo sea, el índice único parcial
+# `ux_postulacion_activa_unica` no le deja volver a postularse a la misma
+# vacante.
+ESTADOS_POSTULACION_ABIERTA = ESTADOS_RETIRABLES
+
+# Estados que se pueden pedir con ?estado=. Se derivan de las choices del
+# modelo para que no se queden desincronizados si se agrega uno nuevo.
+ESTADOS_FILTRABLES = {valor for valor, _etiqueta in Postulacion.ESTADO_CHOICES}
+
+
+def _motivo_proyecto_no_publicable(proyecto):
+    """Texto que explica por qué el proyecto ya no admite postulaciones."""
+    if proyecto.estado == Proyecto.ESTADO_CANCELADO:
+        return f"El proyecto «{proyecto.nombre}» fue cancelado y ya no admite postulaciones."
+    if proyecto.estado == Proyecto.ESTADO_FINALIZADO:
+        return f"El proyecto «{proyecto.nombre}» fue finalizado y ya no admite postulaciones."
+    return (
+        f"El proyecto «{proyecto.nombre}» no está publicado para recibir "
+        "postulaciones."
+    )
+
+
+def _anotar_estado_mostrado(postulacion):
+    """Calcula el estado con el que se muestra una postulación.
+
+    Parche de Etapa 2: una postulación ABIERTA cuyo proyecto está en
+    'borrador', 'cancelado' o 'finalizado' se muestra como "rechazada", con
+    el motivo del cierre. La fila NO se toca en la base de datos: la base
+    todavía no tiene el cascade que cierre estas postulaciones (eso llega en
+    Etapa 3, junto con el trigger de Postgres).
+
+    `estado_mostrado` es el estado real salvo en ese caso. `motivo_cierre`
+    queda vacío cuando el proyecto sigue siendo publicable.
+    """
+    proyecto = postulacion.vacante.proyecto
+    no_publicable = proyecto.estado in ESTADOS_PROYECTO_NO_PUBLICABLE
+
+    postulacion.motivo_cierre = (
+        _motivo_proyecto_no_publicable(proyecto) if no_publicable else ""
+    )
+    postulacion.proyecto_no_publicable = no_publicable
+    postulacion.proyecto_badge = ESTADO_BADGE.get(proyecto.estado, "")
+    postulacion.proyecto_badge_label = proyecto.get_estado_display()
+
+    if postulacion.estado in ESTADOS_POSTULACION_ABIERTA and no_publicable:
+        postulacion.estado_mostrado = Postulacion.ESTADO_RECHAZADA
+    else:
+        postulacion.estado_mostrado = postulacion.estado
+    return postulacion
 
 
 @login_required
@@ -79,25 +131,45 @@ def mis_postulaciones_view(request):
     """
     Vista para listar las postulaciones del usuario autenticado,
     optimizando la consulta con select_related y permitiendo filtros GET.
+
+    El filtro por estado se aplica sobre `estado_mostrado`, no sobre el estado
+    en la base de datos: una postulación abierta de un proyecto ya cerrado se
+    muestra como "rechazada" (parche de Etapa 2) y por tanto no aparece
+    bajo "Pendientes" ni "Preseleccionadas", sino bajo "Rechazadas".
     """
     estado_filtro = request.GET.get('estado')
 
     # Consulta optimizada (sin filtro es_activo por reglas de la tabla postulaciones)
-    postulaciones = Postulacion.objects.filter(
-        postulante_id=request.user.id
-    ).select_related(
-        'vacante__proyecto',
-        'vacante',
-        'pesos_usados'
-    ).order_by('-postulado_en')
+    postulaciones = list(
+        Postulacion.objects.filter(
+            postulante_id=request.user.id
+        ).select_related(
+            'vacante__proyecto',
+            'vacante',
+            'pesos_usados'
+        ).order_by('-postulado_en')
+    )
+
+    for postulacion in postulaciones:
+        _anotar_estado_mostrado(postulacion)
+
+    total = len(postulaciones)
 
     # Aplicar filtro si se seleccionó una categoría válida
-    if estado_filtro in ['pendiente', 'preseleccionada', 'aceptada']:
-        postulaciones = postulaciones.filter(estado=estado_filtro)
+    if estado_filtro in ESTADOS_FILTRABLES:
+        postulaciones = [
+            postulacion
+            for postulacion in postulaciones
+            if postulacion.estado_mostrado == estado_filtro
+        ]
 
     context = {
         'postulaciones': postulaciones,
         'estado_actual': estado_filtro,
+        # Para distinguir "no has postulate nunca" de "no tienes postulaciones
+        # en este estado": la lista filtrada puede estar vacía aunque el
+        # usuario tenga postulaciones en otras categorías.
+        'total_postulaciones': total,
     }
     return render(request, 'applications/application_list.html', context)
 
@@ -113,13 +185,26 @@ def retirar_postulacion_view(request, pk):
     desactivar la única postulación activa del usuario.
     """
     postulacion = get_object_or_404(
-        Postulacion, pk=pk, postulante=request.user
+        Postulacion.objects.select_related("vacante__proyecto"),
+        pk=pk,
+        postulante=request.user,
     )
 
     if postulacion.estado not in ESTADOS_RETIRABLES:
         messages.error(
             request,
             "Solo puedes retirar postulaciones pendientes o preseleccionadas.",
+        )
+        return redirect("applications:mis_postulaciones")
+
+    # El proyecto ya no admite postulaciones (borrador/cancelado/finalizado):
+    # retirarla no tiene sentido. Es el mismo criterio que usa el listado para
+    # mostrarla como "rechazada" (parche de Etapa 2).
+    if postulacion.vacante.proyecto.estado in ESTADOS_PROYECTO_NO_PUBLICABLE:
+        messages.error(
+            request,
+            "Esta postulación ya no está vigente: el proyecto no admite "
+            "postulaciones.",
         )
         return redirect("applications:mis_postulaciones")
 

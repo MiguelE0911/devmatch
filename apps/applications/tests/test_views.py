@@ -46,6 +46,14 @@ class PostulacionesViewBase(TestCase):
 
 
 class MisPostulacionesListTests(PostulacionesViewBase):
+    def setUp(self):
+        super().setUp()
+        # El proyecto nace en borrador (default del modelo). Para que el
+        # listado lo trate como publicable —y el filtro por estado se mida
+        # sobre el estado real— lo llevamos a 'reclutando'. El caso
+        # "proyecto no publicable" tiene su propia clase de tests.
+        lleva_a(self.proyecto, Proyecto.ESTADO_RECLUTANDO)
+
     def test_requiere_login(self):
         respuesta = self.client.get(reverse("applications:mis_postulaciones"))
         self.assertEqual(respuesta.status_code, 302)
@@ -78,7 +86,180 @@ class MisPostulacionesListTests(PostulacionesViewBase):
         self.assertEqual(len(respuesta.context["postulaciones"]), 0)
 
 
+class MisPostulacionesProyectoNoPublicableTests(PostulacionesViewBase):
+    """Parche de Etapa 2: una postulación ABIERTA de un proyecto que ya no
+    admite postulaciones se MUESTRA como "rechazada" — sin ocultar la tarjeta
+    y sin tocar la fila en la base de datos.
+
+    El cascade que cierra de verdad esas postulaciones es de Etapa 3 (trigger
+    + servicio); aquí solo se arregla lo que ve el postulante.
+    """
+
+    def setUp(self):
+        super().setUp()
+        lleva_a(self.proyecto, Proyecto.ESTADO_CANCELADO)
+        self.client.force_login(self.postulante)
+
+    def _listado(self, **params):
+        respuesta = self.client.get(
+            reverse("applications:mis_postulaciones"), params
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        return respuesta
+
+    def test_se_muestra_como_rechazada_y_no_se_oculta(self):
+        postulaciones = list(self._listado().context["postulaciones"])
+        self.assertEqual(len(postulaciones), 1)
+        self.assertEqual(
+            postulaciones[0].estado_mostrado, Postulacion.ESTADO_RECHAZADA
+        )
+        # El estado real en la base no se toca.
+        self.assertEqual(postulaciones[0].estado, Postulacion.ESTADO_PENDIENTE)
+        self.postulacion.refresh_from_db()
+        self.assertEqual(self.postulacion.estado, Postulacion.ESTADO_PENDIENTE)
+
+    def test_no_aparece_bajo_pendientes_ni_preseleccionadas(self):
+        for estado in ("pendiente", "preseleccionada"):
+            with self.subTest(estado=estado):
+                respuesta = self._listado(estado=estado)
+                self.assertEqual(len(respuesta.context["postulaciones"]), 0)
+
+    def test_aparece_bajo_rechazadas(self):
+        respuesta = self._listado(estado="rechazada")
+        postulaciones = list(respuesta.context["postulaciones"])
+        self.assertEqual(len(postulaciones), 1)
+        self.assertEqual(postulaciones[0].pk, self.postulacion.pk)
+
+    def test_muestra_el_motivo_del_cierre(self):
+        postulacion = list(self._listado().context["postulaciones"])[0]
+        self.assertTrue(postulacion.proyecto_no_publicable)
+        self.assertIn("cancelado", postulacion.motivo_cierre)
+        self.assertIn(self.proyecto.nombre, postulacion.motivo_cierre)
+
+    def test_no_ofrece_retirar_una_postulacion_ya_cerrada(self):
+        respuesta = self._listado()
+        self.assertNotContains(respuesta, "Retirar Postulación")
+
+    def test_no_permite_retirar_la_postulacion(self):
+        url = reverse(
+            "applications:retirar_postulacion", args=[self.postulacion.pk]
+        )
+        respuesta = self.client.post(url, follow=True)
+        self.postulacion.refresh_from_db()
+        self.assertEqual(self.postulacion.estado, Postulacion.ESTADO_PENDIENTE)
+        mensajes = [m.message for m in respuesta.context["messages"]]
+        self.assertIn(
+            "Esta postulación ya no está vigente: el proyecto no admite "
+            "postulaciones.",
+            mensajes,
+        )
+
+
+class MisPostulacionesAceptadaEnProyectoCerradoTests(PostulacionesViewBase):
+    """Una postulación ACEPTADA de un proyecto cerrado no se esconde: se
+    muestra como aceptada, con el badge del proyecto y la nota de que el
+    proyecto se cerró después de la aceptación."""
+
+    def setUp(self):
+        super().setUp()
+        self.postulacion.estado = Postulacion.ESTADO_ACEPTADA
+        self.postulacion.save(update_fields=["estado"])
+        lleva_a(self.proyecto, Proyecto.ESTADO_CANCELADO)
+        self.client.force_login(self.postulante)
+
+    def test_sigue_visible_como_aceptada(self):
+        respuesta = self.client.get(reverse("applications:mis_postulaciones"))
+        postulaciones = list(respuesta.context["postulaciones"])
+        self.assertEqual(len(postulaciones), 1)
+        self.assertEqual(
+            postulaciones[0].estado_mostrado, Postulacion.ESTADO_ACEPTADA
+        )
+        self.assertTrue(postulaciones[0].proyecto_no_publicable)
+        self.assertTrue(postulaciones[0].motivo_cierre)
+
+    def test_aparece_bajo_aceptadas(self):
+        respuesta = self.client.get(
+            reverse("applications:mis_postulaciones"), {"estado": "aceptada"}
+        )
+        self.assertEqual(len(respuesta.context["postulaciones"]), 1)
+
+    def test_avisa_que_el_proyecto_se_cerro(self):
+        respuesta = self.client.get(reverse("applications:mis_postulaciones"))
+        self.assertContains(
+            respuesta, "El proyecto se cerró después de tu aceptación"
+        )
+
+
+class MisPostulacionesRechazadaRealTests(PostulacionesViewBase):
+    """Una postulación rechazada de verdad (no por cierre del proyecto) se
+    muestra igual que antes: "rechazada" y sin motivo de cierre."""
+
+    def setUp(self):
+        super().setUp()
+        lleva_a(self.proyecto, Proyecto.ESTADO_RECLUTANDO)
+        self.postulacion.estado = Postulacion.ESTADO_RECHAZADA
+        self.postulacion.save(update_fields=["estado"])
+        self.client.force_login(self.postulante)
+
+    def test_se_muestra_como_rechazada_sin_motivo_de_cierre(self):
+        respuesta = self.client.get(reverse("applications:mis_postulaciones"))
+        postulacion = list(respuesta.context["postulaciones"])[0]
+        self.assertEqual(
+            postulacion.estado_mostrado, Postulacion.ESTADO_RECHAZADA
+        )
+        self.assertFalse(postulacion.proyecto_no_publicable)
+        self.assertEqual(postulacion.motivo_cierre, "")
+
+
+class MisPostulacionesFiltrosTests(PostulacionesViewBase):
+    """Filtros de la vista: los 5 estados son filtrables y uno inválido no
+    filtra nada."""
+
+    def setUp(self):
+        super().setUp()
+        lleva_a(self.proyecto, Proyecto.ESTADO_RECLUTANDO)
+        self.client.force_login(self.postulante)
+
+    def test_filtro_retirada(self):
+        self.postulacion.estado = Postulacion.ESTADO_RETIRADA
+        self.postulacion.save(update_fields=["estado"])
+        respuesta = self.client.get(
+            reverse("applications:mis_postulaciones"), {"estado": "retirada"}
+        )
+        self.assertEqual(len(respuesta.context["postulaciones"]), 1)
+
+    def test_filtro_invalido_no_filtra(self):
+        respuesta = self.client.get(
+            reverse("applications:mis_postulaciones"), {"estado": "inventado"}
+        )
+        self.assertEqual(len(respuesta.context["postulaciones"]), 1)
+        self.assertEqual(respuesta.context["estado_actual"], "inventado")
+
+    def test_total_postulaciones_cuenta_todas(self):
+        Postulacion.objects.create(
+            vacante=self.vacante,
+            postulante=self.postulante,
+            estado=Postulacion.ESTADO_RECHAZADA,
+            match_score=Decimal("10.00"),
+            match_factores=FACTORES_SNAPSHOT,
+        )
+        respuesta = self.client.get(
+            reverse("applications:mis_postulaciones"), {"estado": "rechazada"}
+        )
+        self.assertEqual(respuesta.context["total_postulaciones"], 2)
+        self.assertEqual(len(respuesta.context["postulaciones"]), 1)
+
+
 class RetirarPostulacionTests(PostulacionesViewBase):
+    def setUp(self):
+        super().setUp()
+        # Una postulación solo es retirable mientras su proyecto admite
+        # postulaciones. El proyecto del fixture base nace en 'borrador'
+        # (que ya no es publicable), así que aquí lo llevamos a 'reclutando'.
+        # El caso "proyecto cerrado" se prueba en
+        # MisPostulacionesProyectoNoPublicableTests.
+        lleva_a(self.proyecto, Proyecto.ESTADO_RECLUTANDO)
+
     def _url(self):
         return reverse(
             "applications:retirar_postulacion", args=[self.postulacion.pk]

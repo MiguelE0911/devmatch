@@ -31,9 +31,21 @@ from .models import Postulacion
 
 ESTADOS_ACEPTABLES = {Postulacion.ESTADO_PENDIENTE, Postulacion.ESTADO_PRESELECCIONADA}
 
-# Espejo de projects.services.ESTADOS_CERRADOS: un proyecto que ya cerró su
-# ciclo no debe recibir nuevas postulaciones.
-ESTADOS_PROYECTO_CERRADO = {Proyecto.ESTADO_FINALIZADO, Proyecto.ESTADO_CANCELADO}
+# Estados en los que el proyecto NO admite postulaciones:
+# - "borrador": solo es visible para su creador, y el creador no puede
+#   postularse a su propio proyecto (DEVMATCH-ESP-V2.md: "un proyecto en
+#   estado Borrador no puede ser visible para recibir postulaciones").
+# - "finalizado"/"cancelado": el proyecto cerró su ciclo y ya no recluta.
+#
+# Ninguna de las dos reglas tiene trigger que las aplique, así que este es el
+# punto donde se garantizan (DEVMATCH-BD.md §7). La vista ya filtraba el
+# borrador con un 404; aquí queda también blindado el servicio, que es la vía
+# que usan el admin, el shell y cualquier llamada interna.
+ESTADOS_PROYECTO_NO_POSTULABLE = {
+    Proyecto.ESTADO_BORRADOR,
+    Proyecto.ESTADO_FINALIZADO,
+    Proyecto.ESTADO_CANCELADO,
+}
 
 INDICE_POSTULACION_ACTIVA = "ux_postulacion_activa_unica"
 
@@ -67,7 +79,8 @@ class VacanteSinCupo(Exception):
 
 class VacanteNoPostulable(Exception):
     """La vacante no admite postulaciones: está inactiva, no está 'abierta',
-    o su proyecto ya cerró (finalizado/cancelado)."""
+    o su proyecto no es publicable (borrador) o ya cerró (finalizado/
+    cancelado)."""
 
 
 class CargaIncompatible(Exception):
@@ -131,16 +144,16 @@ def crear_postulacion(usuario, vacante):
     """
     Devuelve la Postulacion creada.
 
-    No valida que el proyecto sea *visible* (no esté en borrador): esa regla
-    corresponde a las vistas, según DEVMATCH-BD.md §7 y §9. Ver
-    docs/DEVMATCH-MATCHING.md, sección 6. Sí valida, en cambio, que la vacante
-    admita postulaciones: la regla "un proyecto finalizado/cancelado ya no
-    recluta" no tiene trigger que la aplique, así que este es el punto donde
-    se garantiza.
+    Valida que la vacante admita postulaciones y que su proyecto sea
+    publicable. Ninguna de esas reglas tiene trigger que las aplique, así
+    que este es el punto donde se garantizan (DEVMATCH-BD.md §7):
+    - la vacante está activa y en estado 'abierta';
+    - el proyecto no está en 'borrador' (solo lo ve su creador) ni en
+      'finalizado'/'cancelado' (ya no recluta).
 
     Levanta:
     - VacanteNoPostulable si la vacante está inactiva, no está 'abierta', o su
-      proyecto ya está finalizado/cancelado.
+      proyecto no admite postulaciones.
     - PostulacionDuplicadaError si el usuario ya tiene una postulación
       activa a esta vacante -- capturarla en la vista y mostrar el mensaje
       amigable correspondiente.
@@ -151,7 +164,7 @@ def crear_postulacion(usuario, vacante):
             f"La vacante no admite postulaciones (estado='{vacante.estado}', "
             f"es_activo={vacante.es_activo})."
         )
-    if vacante.proyecto.estado in ESTADOS_PROYECTO_CERRADO:
+    if vacante.proyecto.estado in ESTADOS_PROYECTO_NO_POSTULABLE:
         raise VacanteNoPostulable(
             "El proyecto ya no está abierto a postulaciones "
             f"(estado='{vacante.proyecto.estado}')."

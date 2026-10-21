@@ -124,17 +124,19 @@ python manage.py test apps.matching.tests.test_engine --noinput --keepdb
 `crear_postulacion` **sí comprueba** que la vacante admita postulaciones:
 
 - Que esté **activa** y en estado **`abierta`**.
-- Que su proyecto **no esté `finalizado` ni `cancelado`** (un proyecto cerrado
-  ya no recluta; esta regla no tiene trigger que la aplique, así que el
-  servicio es el punto donde se garantiza).
+- Que su proyecto **no esté `borrador`, `finalizado` ni `cancelado`**
+  (un proyecto en `borrador` no es visible para recibir postulaciones y un
+  proyecto cerrado ya no recluta; ninguna de las dos reglas tiene trigger que
+  la aplique, así que el servicio es el punto donde se garantizan).
 
 Los dos casos levantan `VacanteNoPostulable`.
 
-Lo que **no** comprueba es que el proyecto sea *visible* (que no esté en
-`borrador`): esa validación corresponde a las **vistas** (Squad B), según
-`DEVMATCH-BD.md` §7 (un proyecto en `borrador` no debe recibir postulaciones:
-"filtro en las vistas/queries") y §9 (el botón "Postularme" se deshabilita si
-`vacantes.estado` no es `abierta`).
+Antes esta regla la aplicaban solo las **vistas** (Squad B) y el servicio la
+dejaba pasar: un `borrador` se filtraba con un 404 en
+`apps/applications/views.py` (`postular_postulacion_view`), pero el admin, el
+shell y cualquier llamada interna se saltaban el filtro. Desde Etapa 2 el
+servicio también la blinda (`ESTADOS_PROYECTO_NO_POSTULABLE` en
+`apps/applications/services.py`).
 
 Lo que además garantiza el servicio:
 
