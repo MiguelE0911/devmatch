@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block title %} Mis Postulaciones {% endblock %}
+
+{% block content %}
+<div class="max-w-[1248px] mx-auto px-4 py-8">
+    <!-- Cabecera -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 w-full mb-5">
+        <div>
+            <h1 class="text-3xl font-bold text-slate-900 tracking-tight">Mis Postulaciones</h1>
+            <p class="text-slate-600 mt-1">Aquí puedes rastrear tus solicitudes, ver el desglose del Match Score y gestionar tus postulaciones activas</p>
+        </div>
+        <a href="{% url 'core:feed' %}" class="inline-flex items-center justify-center px-5 py-2.5 bg-violet-700 hover:bg-violet-800 text-white font-semibold rounded-xl shadow-card transition-colors whitespace-nowrap">
+            Explorar Proyectos
+        </a>
+    </div>
+
+    <!-- Pestañas de Filtro -->
+    <div class="flex flex-wrap gap-2 mb-8 border-b border-slate-200 pb-4">
+        {% if not estado_actual %}
+            <a href="{% url 'applications:mis_postulaciones' %}" class="px-4 py-2 rounded-full text-sm font-medium shadow-sm bg-violet-700 text-white">Todas</a>
+        {% else %}
+            <a href="{% url 'applications:mis_postulaciones' %}" class="px-4 py-2 rounded-full text-sm font-medium shadow-sm bg-slate-100 text-slate-700 hover:bg-slate-200">Todas</a>
+        {% endif %}
+
+        {% if estado_actual == 'pendiente' %}
+            <a href="?estado=pendiente" class="px-4 py-2 rounded-full text-sm font-medium shadow-sm bg-violet-700 text-white">Pendientes</a>
+        {% else %}
+            <a href="?estado=pendiente" class="px-4 py-2 rounded-full text-sm font-medium shadow-sm bg-slate-100 text-slate-700 hover:bg-slate-200">Pendientes</a>
+        {% endif %}
+
+        {% if estado_actual == 'preseleccionada' %}
+            <a href="?estado=preseleccionada" class="px-4 py-2 rounded-full text-sm font-medium shadow-sm bg-violet-700 text-white">Preseleccionadas</a>
+        {% else %}
+            <a href="?estado=preseleccionada" class="px-4 py-2 rounded-full text-sm font-medium shadow-sm bg-slate-100 text-slate-700 hover:bg-slate-200">Preseleccionadas</a>
+        {% endif %}
+
+        {% if estado_actual == 'aceptada' %}
+            <a href="?estado=aceptada" class="px-4 py-2 rounded-full text-sm font-medium shadow-sm bg-violet-700 text-white">Aceptadas</a>
+        {% else %}
+            <a href="?estado=aceptada" class="px-4 py-2 rounded-full text-sm font-medium shadow-sm bg-slate-100 text-slate-700 hover:bg-slate-200">Aceptadas</a>
+        {% endif %}
+
+        {% if estado_actual == 'rechazada' %}
+            <a href="?estado=rechazada" class="px-4 py-2 rounded-full text-sm font-medium shadow-sm bg-violet-700 text-white">Rechazadas</a>
+        {% else %}
+            <a href="?estado=rechazada" class="px-4 py-2 rounded-full text-sm font-medium shadow-sm bg-slate-100 text-slate-700 hover:bg-slate-200">Rechazadas</a>
+        {% endif %}
+
+        {% if estado_actual == 'retirada' %}
+            <a href="?estado=retirada" class="px-4 py-2 rounded-full text-sm font-medium shadow-sm bg-violet-700 text-white">Retiradas</a>
+        {% else %}
+            <a href="?estado=retirada" class="px-4 py-2 rounded-full text-sm font-medium shadow-sm bg-slate-100 text-slate-700 hover:bg-slate-200">Retiradas</a>
+        {% endif %}
+    </div>
+
+    <!-- Contenido / Listado -->
+    {% if postulaciones %}
+        <div class="space-y-6">
+            {% for postulacion in postulaciones %}
+                <div class="flex flex-col lg:flex-row items-stretch lg:items-center gap-6 lg:gap-8 p-6 bg-white border border-slate-200/80 rounded-3xl shadow-card">
+
+                    <!-- 1. Datos del proyecto (izquierda) -->
+                    <div class="flex items-start gap-4 lg:w-[300px] shrink-0">
+                        <div class="w-14 h-14 shrink-0 rounded-full bg-violet-700 text-white flex items-center justify-center font-bold text-lg overflow-hidden">
+                            {% if postulacion.vacante.proyecto.logo_url %}
+                                <img src="{{ postulacion.vacante.proyecto.logo_url }}" alt="{{ postulacion.vacante.proyecto.nombre }}" class="w-full h-full object-cover">
+                            {% else %}
+                                {{ postulacion.vacante.proyecto.nombre|slice:":2"|upper }}
+                            {% endif %}
+                        </div>
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-2 flex-wrap mb-1">
+                                <h3 class="text-xl font-bold text-slate-900">{{ postulacion.vacante.proyecto.nombre }}</h3>
+                                {% if postulacion.proyecto_no_publicable %}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold {{ postulacion.proyecto_badge }}">{{ postulacion.proyecto_badge_label }}</span>
+                                {% endif %}
+                            </div>
+                            <p class="text-violet-700 font-medium text-base mb-2">{{ postulacion.vacante.titulo }}</p>
+                            <p class="text-slate-500 text-sm mb-4">Postulado {{ postulacion.postulado_en|date:"d \d\e M \d\e\l Y" }}</p>
+
+                            <div>
+                                {% if postulacion.estado_mostrado == 'pendiente' %}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">★ Pendiente</span>
+                                {% elif postulacion.estado_mostrado == 'preseleccionada' %}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-violet-100 text-violet-800">★ Preseleccionada</span>
+                                {% elif postulacion.estado_mostrado == 'aceptada' %}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">★ Aceptada</span>
+                                {% elif postulacion.estado_mostrado == 'rechazada' %}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">Rechazada</span>
+                                {% elif postulacion.estado_mostrado == 'retirada' %}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">Retirada</span>
+                                {% else %}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">{{ postulacion.estado_mostrado }}</span>
+                                {% endif %}
+                            </div>
+
+                            {% if postulacion.motivo_cierre %}
+                                <p class="mt-3 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">{{ postulacion.motivo_cierre }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- 2. Círculo del Match Score (centro) -->
+                    <div class="flex items-center justify-center shrink-0 mx-auto">
+                        {% include "core/_score_ring.html" with pct=postulacion.match_score|floatformat:0 size="h-24 w-24" stroke_class="stroke-violet-700" text_class="text-violet-700" track_class="stroke-violet-100" %}
+                    </div>
+
+                    <!-- 3. Barras de factores -->
+                    <div class="flex-1 min-w-0 flex flex-col gap-3 text-xs text-slate-600 lg:border-l lg:border-slate-200 lg:pl-6 max-w-[420px]">
+
+                        <div class="grid grid-cols-[110px_minmax(0,1fr)_40px] items-center gap-3">
+                            <span class="text-right">Habilidades</span>
+                            {% include "core/_factor_bar.html" with pct=postulacion.match_factores.habilidades.score|floatformat:0 track_class="bg-violet-100" fill_class="bg-violet-700" %}
+                            <span class="text-right font-bold text-violet-700">{{ postulacion.match_factores.habilidades.score|floatformat:0 }}%</span>
+                        </div>
+
+                        <div class="grid grid-cols-[110px_minmax(0,1fr)_40px] items-center gap-3">
+                            <span class="text-right">Tecnologías</span>
+                            {% include "core/_factor_bar.html" with pct=postulacion.match_factores.tecnologias.score|floatformat:0 track_class="bg-violet-100" fill_class="bg-violet-700" %}
+                            <span class="text-right font-bold text-violet-700">{{ postulacion.match_factores.tecnologias.score|floatformat:0 }}%</span>
+                        </div>
+
+                        <div class="grid grid-cols-[110px_minmax(0,1fr)_40px] items-center gap-3">
+                            <span class="text-right">Nivel técnico</span>
+                            {% include "core/_factor_bar.html" with pct=postulacion.match_factores.nivel.score|floatformat:0 track_class="bg-violet-100" fill_class="bg-violet-700" %}
+                            <span class="text-right font-bold text-violet-700">{{ postulacion.match_factores.nivel.score|floatformat:0 }}%</span>
+                        </div>
+
+                        <div class="grid grid-cols-[110px_minmax(0,1fr)_40px] items-center gap-3">
+                            <span class="text-right">Experiencia</span>
+                            {% include "core/_factor_bar.html" with pct=postulacion.match_factores.experiencia.score|floatformat:0 track_class="bg-violet-100" fill_class="bg-violet-700" %}
+                            <span class="text-right font-bold text-violet-700">{{ postulacion.match_factores.experiencia.score|floatformat:0 }}%</span>
+                        </div>
+
+                        <div class="grid grid-cols-[110px_minmax(0,1fr)_40px] items-center gap-3">
+                            <span class="text-right">Disponibilidad</span>
+                            {% include "core/_factor_bar.html" with pct=postulacion.match_factores.disponibilidad.score|floatformat:0 track_class="bg-violet-100" fill_class="bg-violet-700" %}
+                            <span class="text-right font-bold text-violet-700">{{ postulacion.match_factores.disponibilidad.score|floatformat:0 }}%</span>
+                        </div>
+
+                    </div>
+
+                    <!-- 4. Botón de acción (al final) -->
+                    <div class="flex flex-col items-center justify-center gap-2 w-full lg:w-[190px] shrink-0">
+                        {% if postulacion.estado_mostrado == 'pendiente' or postulacion.estado_mostrado == 'preseleccionada' %}
+                            <form action="{% url 'applications:retirar_postulacion' postulacion.pk %}" method="POST">
+                                {% csrf_token %}
+                                <button type="submit" onclick="return confirm('¿Retirar esta postulación? Esta acción no se puede deshacer.')" class="px-5 py-2.5 bg-violet-700 hover:bg-violet-800 text-white rounded-xl text-sm font-semibold transition-all whitespace-nowrap">
+                                    Retirar Postulación
+                                </button>
+                            </form>
+                        {% elif postulacion.estado_mostrado == 'retirada' %}
+                            <span class="text-xs text-slate-400 italic text-center">Retiraste esta postulación</span>
+                        {% elif postulacion.estado_mostrado == 'aceptada' %}
+                            {% if postulacion.proyecto_no_publicable %}
+                                <span class="text-xs text-slate-400 italic text-center">El proyecto se cerró después de tu aceptación</span>
+                            {% else %}
+                                <span class="text-xs text-slate-400 italic text-center">Ya formas parte de este proyecto</span>
+                            {% endif %}
+                        {% elif postulacion.estado_mostrado == 'rechazada' %}
+                            {% if postulacion.motivo_cierre %}
+                                <span class="text-xs text-slate-400 italic text-center">El proyecto ya no admite postulaciones</span>
+                            {% else %}
+                                <span class="text-xs text-slate-400 italic text-center">No fuiste seleccionado/a</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="text-xs text-slate-400 italic text-center">Postulación en estado final</span>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <!-- Estado Vacío -->
+        <div class="bg-white rounded-3xl border border-slate-200/80 p-16 text-center shadow-card">
+            <div class="w-20 h-20 bg-violet-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg class="w-10 h-10 text-violet-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+            </div>
+            {% if total_postulaciones %}
+                <h3 class="text-xl font-bold text-slate-900 mb-2">No tienes postulaciones en esta categoría</h3>
+                <p class="text-slate-500 mb-6 max-w-md mx-auto">Tienes {{ total_postulaciones }} {% if total_postulaciones == 1 %}postulación{% else %}postulaciones{% endif %} en otras categorías</p>
+                <a href="{% url 'applications:mis_postulaciones' %}" class="inline-block bg-violet-700 hover:bg-violet-800 text-white font-medium px-6 py-2.5 rounded-xl transition-all shadow-card">
+                    Ver todas
+                </a>
+            {% else %}
+                <h3 class="text-xl font-bold text-slate-900 mb-2">No has enviado postulaciones aun</h3>
+                <p class="text-slate-500 mb-6 max-w-md mx-auto">Explora las vacantes disponibles y encuentra el proyecto perfecto para ti</p>
+                <a href="{% url 'core:feed' %}" class="inline-block bg-violet-700 hover:bg-violet-800 text-white font-medium px-6 py-2.5 rounded-xl transition-all shadow-card">
+                    Explorar Proyectos
+                </a>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

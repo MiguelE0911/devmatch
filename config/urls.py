@@ -17,6 +17,7 @@ urlpatterns = [
     path("", include("apps.core.urls")),
     path("", include("apps.projects.urls")),
     path("", include("apps.accounts.urls")),
+    path("applications/", include("apps.applications.urls")),
 ]
 
 # /media/ se sirve SIEMPRE con la vista estática de Django (en desarrollo ya

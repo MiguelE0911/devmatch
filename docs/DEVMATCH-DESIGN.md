@@ -45,12 +45,11 @@ Reglas de oro:
 | `templates/core/_score_ring.html` | Componente donut de match score (se incluye con parámetros). | Sí. |
 | `templates/core/_factor_bar.html` | Barra de factor (se incluye con parámetros). | Sí. |
 | `static/js/landing-menu.js` | Script del menú móvil de la landing (vanilla). | Se referencia, no se edita desde las vistas. |
-| `templates/core/health.html` | Health-check de la DB (extiende `base.html`). | Referencia de cómo se ve una vista "funcional" del shell. |
 
 Hay **dos patrones de página** conviviendo:
 
 - **Standalone** (landing): `home.html` NO extiende `base.html`; trae su propio `<html>` y arma el `<head>` con `core/_head.html` (Montserrat + CSS), su navbar con `core/_landing_navbar.html` (exclusivo del landing) y sus secciones. Una página de marketing o que necesite el look completo de marca usa este patrón.
-- **Shell** (funcionales): `health.html` extiende `base.html` (`{% extends "base.html" %}` + `{% block content %}`) y hereda la barra superior y el menú lateral del shell (`partials/topbar.html` + `partials/sidebar.html`) y el **footer global** (`partials/footer.html`). Las vistas de datos/forms de accounts/projects parten de acá.
+- **Shell** (funcionales): las páginas de `accounts`/`projects` extienden `base.html` (`{% extends "base.html" %}` + `{% block content %}`) y heredan la barra superior y el menú lateral del shell (`partials/topbar.html` + `partials/sidebar.html`) y el **footer global** (`partials/footer.html`). Las vistas de datos/forms parten de acá.
 
 **Navegación / footer por contexto:** el navbar del landing es **exclusivo de la landing** (`core/_landing_navbar.html`); dentro de la web se usan `partials/topbar.html` (barra superior) y `partials/sidebar.html` (menú lateral). El **footer global** (`partials/footer.html`) aplica a todas las páginas **excepto la landing**, que tendrá un footer exclusivo propio (`core/_landing_footer.html`, ya existe).
 

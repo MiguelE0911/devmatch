@@ -32,10 +32,42 @@ class TransicionEstadoInvalida(Exception):
     """Se intentó pasar un proyecto de un estado a otro no permitido."""
 
 
+# Badge de estado del proyecto: (clases de color, label). Cada uno de los 7
+# estados usa un color DIFERENTE (spec: "cada uno con un color diferente").
+# Vive aquí y no en `views.py` para que las vistas de `projects` y de
+# `applications` compartan una sola fuente de verdad del color por estado.
+ESTADO_BADGE = {
+    Proyecto.ESTADO_BORRADOR: "bg-slate-100 text-slate-600",
+    Proyecto.ESTADO_PUBLICADO: "bg-violet-100 text-violet-700",
+    Proyecto.ESTADO_RECLUTANDO: "bg-green-100 text-green-700",
+    Proyecto.ESTADO_EQUIPO_COMPLETO: "bg-cyan-100 text-cyan-700",
+    Proyecto.ESTADO_EN_DESARROLLO: "bg-amber-100 text-amber-700",
+    Proyecto.ESTADO_FINALIZADO: "bg-emerald-100 text-emerald-700",
+    Proyecto.ESTADO_CANCELADO: "bg-rose-100 text-rose-600",
+}
+
+
 # Un proyecto en un estado "cerrado" ya no recluta: sus vacantes abiertas no
 # deben seguir recibiendo postulaciones (regla de negocio, no hay trigger que
 # la aplique — ver `cerrar_vacantes_abiertas`).
 ESTADOS_CERRADOS = {Proyecto.ESTADO_FINALIZADO, Proyecto.ESTADO_CANCELADO}
+
+
+# Estados en los que el proyecto NO es visible/aceptable para postulaciones:
+# "borrador" solo lo ve su creador (y el creador no puede postularse a lo
+# suyo), y "cancelado"/"finalizado" yacerraron su ciclo de reclutamiento.
+# Un proyecto "publicado"/"reclutando"/"equipo_completo"/"en_desarrollo" sí
+# admite postulaciones.
+#
+# Parche de Etapa 2: mientras la base no tenga el cascade que cierre las
+# postulaciones de un proyecto cerrado (Etapa 3), la interfaz marca como
+# "rechazada" toda postulación ABIERTA cuyo proyecto esté en este conjunto,
+# sin tocar la fila en la base de datos.
+ESTADOS_PROYECTO_NO_PUBLICABLE = (
+    Proyecto.ESTADO_BORRADOR,
+    Proyecto.ESTADO_CANCELADO,
+    Proyecto.ESTADO_FINALIZADO,
+)
 
 
 TRANSICIONES_VALIDAS = {
@@ -313,9 +345,3 @@ def actualizar_vacante(
         )
         sincronizar_requisitos(vacante, habilidades, tecnologias)
     return vacante
-
-def esta_abierta(vacante) -> bool:
-    return vacante.estado == Vacante.ESTADO_ABIERTA
-
-def tiene_cupo_libre(vacante) -> bool:
-    return (vacante.cupos_totales - vacante.cupos_ocupados) > 0

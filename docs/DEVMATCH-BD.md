@@ -467,7 +467,7 @@ Se dispara `BEFORE UPDATE OR DELETE` en `auditoria_logs` — más estricto que e
 | Nada se borra físicamente en tablas de historial | ✅ Base de datos (trigger de bloqueo) |
 | El log de auditoría es inmutable | ✅ Base de datos (trigger) |
 | Validación de roles y permisos en la interfaz Y en el servidor | ⚠️ Responsabilidad de Django (`accounts/permissions.py`, mixins) — la base de datos no sabe qué rol tiene la sesión HTTP actual |
-| Un proyecto en `Borrador` no debe ser visible para recibir postulaciones | ⚠️ Responsabilidad de Django (filtro en las vistas/queries) — la base de datos no impide insertar una postulación a una vacante de un proyecto en borrador, solo bloquea el sobrecupo y los duplicados |
+| Un proyecto en `Borrador` no debe ser visible para recibir postulaciones | ⚠️ Responsabilidad de Django — la base de datos no impide insertar una postulación a una vacante de un proyecto en borrador, solo bloquea el sobrecupo y los duplicados. Desde Etapa 2 lo garantizan **las vistas** (404 en `postular_postulacion_view`) **y el servicio** (`ESTADOS_PROYECTO_NO_POSTULABLE` en `apps/applications/services.py` → `VacanteNoPostulable`) |
 | Registrar cada decisión crítica en `auditoria_logs` | ⚠️ Responsabilidad de Django (`audit/services.py: log_action(...)`) — no ocurre automáticamente vía trigger, porque la base de datos no tiene acceso directo al usuario autenticado de la sesión HTTP sin plumbing adicional |
 | Prevención de carga (disponibilidad vs. proyectos activos) | ⚠️ Responsabilidad de Django — la base de datos solo almacena `disponibilidad_horas_semana`; el cálculo de sobrecarga comparando contra membresías activas es lógica de aplicación |
 

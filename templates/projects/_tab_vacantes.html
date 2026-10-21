@@ -175,8 +175,9 @@
                                     </p>
 
                                     <!-- Formulario con los botones de acción -->
-                                    <form method="post" action="{% url 'projects:postularse_vacante' vacante.pk %}" class="mt-8 flex items-center justify-center gap-4">
+                                    <form method="post" action="{% url 'applications:postular' vacante.pk %}" class="mt-8 flex items-center justify-center gap-4">
                                         {% csrf_token %}
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
                                         <button type="button" data-modal-close="modal-confirmar-{{ vacante.pk }}"
                                                 class="w-1/2 rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50">
                                             Cancelar
@@ -291,37 +292,3 @@
     {% endif %}
     </div>
 </div>
-
-{% if messages %}
-    {% for message in messages %}
-        {% if 'postulado exitosamente' in message.message %}
-        
-            <div id="modal-postulacion" class="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/40 p-4 font-montserrat backdrop-blur-sm">
-                <div class="relative w-full max-w-lg rounded-3xl bg-white p-10 text-center shadow-2xl">
-                    
-                    <div class="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-violet-50 text-violet-700">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="h-10 w-10">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                        </svg>
-                    </div>
-
-                    <h3 class="mt-6 text-2xl font-bold text-slate-900">¡Postulación enviada!</h3>
-                    
-                    <p class="mt-4 text-base font-semibold text-slate-700">
-                        Tu postulación ha sido enviada correctamente.
-                    </p>
-                    <p class="mt-2 text-sm text-slate-500">
-                        El creador del proyecto revisará tu perfil y se pondrá en contacto contigo si estás seleccionado.
-                    </p>
-
-                    <div class="mt-10">
-                        <button type="button" onclick="document.getElementById('modal-postulacion').remove()"
-                                class="rounded-xl bg-violet-700 px-8 py-3 text-sm font-bold text-white transition-colors hover:bg-violet-800">
-                            Entendido
-                        </button>
-                    </div>
-                </div>
-            </div>
-        {% endif %}
-    {% endfor %}
-{% endif %}

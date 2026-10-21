@@ -67,18 +67,13 @@ urlpatterns = [
         name="preseleccionar_postulacion",
     ),
     path(
-        "vacantes/<int:pk>/postular/",
-        views.PostularseVacanteView.as_view(),
-        name="postularse_vacante",
-    ),
-    path(
         "postulacion/<int:pk>/aprobar/",
         views.AprobarPostulacionView.as_view(),
         name="aprobar_postulacion",
     ),
     path(
-            "postulacion/<int:pk>/rechazar/",
-            views.RechazarPostulacionView.as_view(),
-            name="rechazar_postulacion",
-        ),
+        "postulacion/<int:pk>/rechazar/",
+        views.RechazarPostulacionView.as_view(),
+        name="rechazar_postulacion",
+    ),
 ]

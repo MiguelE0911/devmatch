@@ -14,4 +14,12 @@ class PostulacionAdmin(admin.ModelAdmin):
     )
     list_filter = ("estado",)
     search_fields = ("postulante__email", "postulante__username", "vacante__titulo")
-    readonly_fields = ("postulado_en", "actualizado_en")
+    # `postulado_en` y `actualizado_en` los pone el sistema; el snapshot de
+    # matching (score + factores) es inmutable: se calcula al postular y no
+    # se recalcula aunque cambie el proyecto o el perfil (CR-07, CR-12).
+    readonly_fields = (
+        "postulado_en",
+        "actualizado_en",
+        "match_score",
+        "match_factores",
+    )

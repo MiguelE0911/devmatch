@@ -37,15 +37,20 @@ class CrearPostulacionTests(TestCase):
             peso_experiencia=Decimal("0.100"),
             peso_disponibilidad=Decimal("0.100"),
         )
-        creador = Usuario.objects.create_user(
+        self.creador = Usuario.objects.create_user(
             "creador-svc@devmatch.test", "creador-svc", password="Clave-123!"
         )
         self.postulante = Usuario.objects.create_user(
             "post-svc@devmatch.test", "post-svc", password="Clave-123!"
         )
         proyecto = Proyecto.objects.create(
-            creador=creador, nombre="Demo", descripcion="desc"
+            creador=self.creador, nombre="Demo", descripcion="desc"
         )
+        # El servicio exige que el proyecto sea publicable: uno en 'borrador'
+        # no admite postulaciones (DEVMATCH-BD.md §7), así que estos tests
+        # arrancan con el proyecto ya reclutando. El caso 'borrador' tiene
+        # su propio test más abajo.
+        lleva_a(proyecto, Proyecto.ESTADO_RECLUTANDO)
         self.vacante = Vacante.objects.create(
             proyecto=proyecto, titulo="Backend", descripcion="desc", cupos_totales=2
         )
@@ -141,6 +146,32 @@ class CrearPostulacionTests(TestCase):
         with self.assertRaises(VacanteNoPostulable):
             crear_postulacion(self.postulante, self.vacante)
         self.assertEqual(Postulacion.objects.count(), 0)
+
+    def test_proyecto_en_borrador_no_admite_postulacion(self):
+        # Un proyecto en borrador solo lo ve su creador y no es visible para
+        # recibir postulaciones (DEVMATCH-BD.md §7). La vista ya lo filtraba
+        # con un 404; el servicio lo blinda para el admin, el shell y
+        # cualquier llamada interna.
+        proyecto_borrador = Proyecto.objects.create(
+            creador=self.creador, nombre="Borrador", descripcion="desc"
+        )
+        vacante_borrador = Vacante.objects.create(
+            proyecto=proyecto_borrador,
+            titulo="Backend",
+            descripcion="desc",
+            cupos_totales=1,
+        )
+        self.assertEqual(proyecto_borrador.estado, Proyecto.ESTADO_BORRADOR)
+        with self.assertRaises(VacanteNoPostulable):
+            crear_postulacion(self.postulante, vacante_borrador)
+        self.assertEqual(Postulacion.objects.count(), 0)
+
+    def test_proyecto_reclutando_si_admite_postulacion(self):
+        # Contrapositivo del caso anterior: con el proyecto publicado el
+        # servicio deja pasar la postulación.
+        self.assertEqual(self.vacante.proyecto.estado, Proyecto.ESTADO_RECLUTANDO)
+        postulacion = crear_postulacion(self.postulante, self.vacante)
+        self.assertEqual(postulacion.estado, Postulacion.ESTADO_PENDIENTE)
 
 
 class AceptarPostulacionBase(TestCase):

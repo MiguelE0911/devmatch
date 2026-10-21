@@ -6,6 +6,13 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
+from apps.projects.services import (
+    ESTADOS_CERRADOS,
+    TransicionEstadoInvalida,
+    cambiar_estado,
+    cerrar_vacantes_abiertas,
+)
+
 # Contraseña de demo para TODOS los usuarios generados. Es para que Squad B
 # pueda loguearse en el frontend de prueba; no es un secreto de producción.
 DEMO_PASSWORD = "Devmatch2026!"
@@ -30,10 +37,16 @@ class Command(BaseCommand):
     un UPDATE posterior al get_or_create, tanto si la fila es nueva como si ya
     existía. Cada corrida vuelve a fijar los mismos desfases relativos.
 
-    TODO: revisar las vacantes que este seed crea en proyectos
-    finalizado/cancelado. Desde que el alta de vacantes se bloquea en
-    proyectos cerrados, esas filas quedan en un estado que la interfaz ya no
-    permite reproducir (siguen visibles como datos inconsistentes).
+    Invariantes de estado (tarjeta #36): el seed nunca deja filas que la
+    interfaz ya no pueda reproducir con los gates actuales — no hay vacantes
+    abiertas ni interacciones activas en proyectos finalizados/cancelados, y
+    una vacante llenada por el trigger de cupos permanece 'cubierta' en
+    re-corridas. Si un proyecto seed existe en BD con otro estado, se repara
+    con services.cambiar_estado (misma matriz que el trigger
+    fn_validar_transicion_proyecto); un estado terminal NO se revierte (no
+    tiene transición de salida), su proyecto no se reactiva y sus vacantes se
+    normalizan con cerrar_vacantes_abiertas. Un drift irreparable no aborta
+    el seed: se avisa por stdout y se conserva el estado actual.
     """
 
     help = "Genera datos de prueba (fixtures) para Squad B."
@@ -282,6 +295,24 @@ class Command(BaseCommand):
                 ],
             },
             {
+                "creador": "juan@devmatch.local",
+                "nombre": "DevNotes — Notas técnicas",
+                "creado_hace": 14,
+                "descripcion": "Bitácora colaborativa de notas y apuntes de clases.",
+                "estado": Proyecto.ESTADO_BORRADOR,
+                "media": [],
+                "vacantes": [
+                    {
+                        "titulo": "Frontend Developer",
+                        "descripcion": "Maquetar el editor de notas y la vista de organización.",
+                        "estado": Vacante.ESTADO_ABIERTA,
+                        "cupos_totales": 1,
+                        "habilidades": ["Frontend Development"],
+                        "tecnologias": ["React"],
+                    },
+                ],
+            },
+            {
                 "creador": "maria@devmatch.local",
                 "nombre": "ClinVis — Dashboards clínicos",
                 "creado_hace": 40,
@@ -422,12 +453,35 @@ class Command(BaseCommand):
             )
             if not creado:
                 proyecto.descripcion = datos["descripcion"]
-                proyecto.es_activo = True
-                # No forzar transición si está en estado terminal (respeta triggers)
-                terminales = {Proyecto.ESTADO_FINALIZADO, Proyecto.ESTADO_CANCELADO}
-                if proyecto.estado not in terminales:
-                    proyecto.estado = datos["estado"]
-                proyecto.save(update_fields=["descripcion", "estado", "es_activo"])
+                proyecto.save(update_fields=["descripcion"])
+                if proyecto.estado in ESTADOS_CERRADOS:
+                    # Terminal: no existe transición de salida, así que no se
+                    # revierte al fixture ni se reactiva; solo se normalizan
+                    # sus vacantes a coherentes con el gate de proyectos
+                    # cerrados (Ronda 4).
+                    cerrar_vacantes_abiertas(proyecto)
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f"  aviso: '{proyecto.nombre}' está en estado terminal "
+                            f"'{proyecto.estado}'; no se revierte a "
+                            f"'{datos['estado']}' y sus vacantes quedan cerradas."
+                        )
+                    )
+                else:
+                    if proyecto.estado != datos["estado"]:
+                        try:
+                            cambiar_estado(proyecto, datos["estado"])
+                        except TransicionEstadoInvalida:
+                            self.stdout.write(
+                                self.style.WARNING(
+                                    f"  aviso: no se pudo llevar '{proyecto.nombre}' de "
+                                    f"'{proyecto.estado}' a '{datos['estado']}' "
+                                    f"(transición inválida); se conserva el estado actual."
+                                )
+                            )
+                    if not proyecto.es_activo:
+                        proyecto.es_activo = True
+                        proyecto.save(update_fields=["es_activo"])
 
             fechas = {"creado_en": self._hace_dias(datos["creado_hace"])}
             # finalizado_en/cancelado_en: el trigger solo los rellena al CAMBIAR
@@ -448,18 +502,46 @@ class Command(BaseCommand):
                 )
 
             for orden, vacante in enumerate(datos["vacantes"]):
+                if (
+                    vacante["estado"] == Vacante.ESTADO_ABIERTA
+                    and proyecto.estado in ESTADOS_CERRADOS
+                ):
+                    # Alta bloqueada en proyectos cerrados (Ronda 4): una
+                    # vacante abierta aquí sería un estado que la interfaz ya
+                    # no permite reproducir (cerrar_vacantes_abiertas en la
+                    # rama anterior ya normalizó las existentes).
+                    continue
+                estado_deseado = vacante["estado"]
+                if proyecto.estado in ESTADOS_CERRADOS:
+                    estado_deseado = Vacante.ESTADO_CANCELADA
                 vac, _creada = Vacante.objects.get_or_create(
                     proyecto=proyecto,
                     titulo=vacante["titulo"],
                     defaults={
                         "descripcion": vacante["descripcion"],
                         "cupos_totales": vacante["cupos_totales"],
-                        "estado": vacante["estado"],
+                        "estado": estado_deseado,
                     },
                 )
                 if not _creada:
-                    vac.estado = vacante["estado"]
-                    vac.cupos_totales = vacante["cupos_totales"]
+                    # Nunca reducir cupos_totales por debajo de cupos_ocupados:
+                    # una vacante con membresías legadas (p. ej. testers con el
+                    # trigger deshabilitado) violaría chk_cupos_no_exceden y
+                    # abortaría el seed completo (caso PetMatch en Neon: 4/2).
+                    vac.cupos_totales = max(
+                        vacante["cupos_totales"], vac.cupos_ocupados
+                    )
+                    nuevo_estado = estado_deseado
+                    # fn_actualizar_cupos_vacante marca 'cubierta' al llenarse
+                    # los cupos; una re-corrida no debe destruir ese estado ni
+                    # dejar una vacante llena como 'abierta'.
+                    if (
+                        nuevo_estado == Vacante.ESTADO_ABIERTA
+                        and vac.cupos_ocupados >= vac.cupos_totales
+                    ):
+                        nuevo_estado = Vacante.ESTADO_CUBIERTA
+                    if vac.estado != nuevo_estado:
+                        vac.estado = nuevo_estado
                     vac.es_activo = True
                     vac.save(update_fields=["estado", "cupos_totales", "es_activo"])
                 self._fijar(
@@ -673,6 +755,16 @@ class Command(BaseCommand):
                 continue
             if proyecto.creador_id == usuario.id:
                 continue
+            if proyecto.estado in ESTADOS_CERRADOS:
+                # No (re)crear interacciones activas en proyectos cerrados.
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"  aviso: se omite la postulación de {esc['postulante']} a "
+                        f"'{esc['vacante']}' ({esc['proyecto']}): el proyecto está "
+                        f"'{proyecto.estado}'."
+                    )
+                )
+                continue
             score, factores = self._score_y_factores(pesos, esc["factores"])
             defaults = {
                 "estado": esc["estado"],
@@ -715,6 +807,15 @@ class Command(BaseCommand):
                 Proyecto, Vacante, nombre_proyecto, titulo_vacante
             )
             if usuario is None or vacante is None or proyecto.creador_id == usuario.id:
+                continue
+            if proyecto.estado in ESTADOS_CERRADOS:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"  aviso: se omite la aceptación de {email} en "
+                        f"'{titulo_vacante}' ({nombre_proyecto}): el proyecto está "
+                        f"'{proyecto.estado}'."
+                    )
+                )
                 continue
             score, factores = self._score_y_factores(
                 pesos,
@@ -770,6 +871,15 @@ class Command(BaseCommand):
                 Proyecto, Vacante, nombre_proyecto, titulo_vacante
             )
             if usuario is None or vacante is None or proyecto.creador_id == usuario.id:
+                continue
+            if proyecto.estado in ESTADOS_CERRADOS:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"  aviso: se omite la invitación de {email} a "
+                        f"'{titulo_vacante}' ({nombre_proyecto}): el proyecto está "
+                        f"'{proyecto.estado}'."
+                    )
+                )
                 continue
             fecha_respuesta = self._hace_dias(respondida_hace)
             try:

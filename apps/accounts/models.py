@@ -96,6 +96,19 @@ class Usuario(AbstractBaseUser):
     def __str__(self):
         return self.email
 
+    def get_full_name(self):
+        """Nombre completo del usuario.
+
+        `AbstractBaseUser` no la trae (solo `AbstractUser`), pero es la API
+        estándar de Django y las plantillas ya la usan para mostrar el
+        nombre del postulante. Si no hay nombre registrado, se cae al
+        username en la plantilla con `|default:`.
+        """
+        return f"{self.first_name} {self.last_name}".strip()
+
+    def get_short_name(self):
+        return self.first_name or self.username
+
     # --- Puentes manuales al sistema de auth/admin de Django -----------
     # Reemplazan lo que PermissionsMixin daba "gratis", sin agregar
     # columnas ni tablas que no existen en el esquema oficial.
