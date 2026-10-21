@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.defaultfilters import floatformat
@@ -208,10 +209,34 @@ def retirar_postulacion_view(request, pk):
         )
         return redirect("applications:mis_postulaciones")
 
-    postulacion.estado = Postulacion.ESTADO_RETIRADA
-    postulacion.decidido_por = request.user
-    postulacion.decidido_en = timezone.now()
-    postulacion.save(update_fields=["estado", "decidido_por", "decidido_en", "actualizado_en"])
+    try:
+        with transaction.atomic():
+            postulacion = Postulacion.objects.select_for_update().get(
+                pk=postulacion.pk, postulante=request.user
+            )
+
+            if postulacion.estado not in ESTADOS_RETIRABLES:
+                messages.error(
+                    request,
+                    "Solo puedes retirar postulaciones pendientes o preseleccionadas.",
+                )
+                return redirect("applications:mis_postulaciones")
+
+            if postulacion.vacante.proyecto.estado in ESTADOS_PROYECTO_NO_PUBLICABLE:
+                messages.error(
+                    request,
+                    "Esta postulación ya no está vigente: el proyecto no admite "
+                    "postulaciones.",
+                )
+                return redirect("applications:mis_postulaciones")
+
+            postulacion.estado = Postulacion.ESTADO_RETIRADA
+            postulacion.decidido_por = request.user
+            postulacion.decidido_en = timezone.now()
+            postulacion.save(update_fields=["estado", "decidido_por", "decidido_en", "actualizado_en"])
+    except Exception:
+        messages.error(request, "Error al retirar la postulación.")
+        return redirect("applications:mis_postulaciones")
 
     messages.success(request, "Tu postulación fue retirada.")
     return redirect("applications:mis_postulaciones")

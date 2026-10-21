@@ -935,23 +935,29 @@ class PreseleccionarPostulacionView(LoginRequiredMixin, View):
                 request, "No tienes permisos para realizar esta acción."
             )
 
-        if postulacion.estado != Postulacion.ESTADO_PENDIENTE:
-            return self._responder(
-                request,
-                "Solo se pueden preseleccionar postulaciones en estado pendiente.",
-            )
+        try:
+            with transaction.atomic():
+                postulacion = Postulacion.objects.select_for_update().get(pk=postulacion.pk)
 
-        postulacion.estado = Postulacion.ESTADO_PRESELECCIONADA
-        postulacion.decidido_por = request.user
-        postulacion.decidido_en = timezone.now()
-        postulacion.save(
-            update_fields=[
-                "estado",
-                "decidido_por",
-                "decidido_en",
-                "actualizado_en",
-            ]
-        )
+                if postulacion.estado != Postulacion.ESTADO_PENDIENTE:
+                    return self._responder(
+                        request,
+                        "Solo se pueden preseleccionar postulaciones en estado pendiente.",
+                    )
+
+                postulacion.estado = Postulacion.ESTADO_PRESELECCIONADA
+                postulacion.decidido_por = request.user
+                postulacion.decidido_en = timezone.now()
+                postulacion.save(
+                    update_fields=[
+                        "estado",
+                        "decidido_por",
+                        "decidido_en",
+                        "actualizado_en",
+                    ]
+                )
+        except Exception:
+            return self._responder(request, "Error al procesar la preselección.")
 
         messages.success(
             request,
@@ -974,15 +980,11 @@ class PreseleccionarPostulacionView(LoginRequiredMixin, View):
 class AprobarPostulacionView(LoginRequiredMixin, View):
     """Aprueba a un candidato preseleccionado y ocupa un cupo en la vacante.
 
-    La aceptación bloquea las filas implicadas (postulación y vacante) con
-    `select_for_update`, en ese orden, para que dos aprobaciones simultáneas
-    de la misma vacante no puedan ocupar dos veces el último cupo.
-
-    TODO(Etapa 3): el contador de cupos se incrementa a mano porque todavía
-    no existe la membresía de equipo. Cuando llegue `teams.EquipoMembresia`
-    hay que delegar en `applications.services.aceptar_postulacion()`, que
-    crea la membresía y deja que el trigger `trg_membresia_actualiza_cupos`
-    mantenga el contador y el estado de la vacante.
+    Delega en `applications.services.aceptar_postulacion`, que:
+    - Bloquea postulación → vacante → perfil con `select_for_update` (orden anti-deadlock)
+    - Valida cupos, carga/disponibilidad y membresía duplicada en el mismo proyecto
+    - Crea la `EquipoMembresia` atómicamente; el trigger `trg_membresia_actualiza_cupos`
+      mantiene `cupos_ocupados` y el estado de la vacante.
     """
     http_method_names = ["post"]
 
@@ -1001,53 +1003,29 @@ class AprobarPostulacionView(LoginRequiredMixin, View):
             messages.error(request, "No tienes permisos para realizar esta acción.")
             return redirect("projects:mis_proyectos")
 
-        with transaction.atomic():
-            postulacion = (
-                Postulacion.objects.select_for_update().get(pk=postulacion.pk)
-            )
-            vacante = Vacante.objects.select_for_update().get(pk=postulacion.vacante_id)
-
-            if postulacion.estado != Postulacion.ESTADO_PRESELECCIONADA:
-                messages.error(
-                    request,
-                    "Solo se pueden aprobar postulaciones que estén preseleccionadas.",
+        try:
+            with transaction.atomic():
+                postulacion = Postulacion.objects.select_for_update().get(pk=postulacion.pk)
+                from apps.applications.services import (
+                    aceptar_postulacion,
+                    VacanteSinCupo,
+                    PostulacionNoAceptable,
+                    CargaIncompatible,
                 )
-                return redirect(destino)
-
-            if not vacante.es_activo or vacante.estado == Vacante.ESTADO_CANCELADA:
-                messages.error(request, "Esta vacante ya no está disponible.")
-                return redirect(destino)
-
-            if vacante.cupos_ocupados >= vacante.cupos_totales:
-                messages.error(request, "Esta vacante ya ha alcanzado su límite de cupos.")
-                return redirect(destino)
-
-            postulacion.estado = Postulacion.ESTADO_ACEPTADA
-            postulacion.decidido_por = request.user
-            postulacion.decidido_en = timezone.now()
-            postulacion.save(
-                update_fields=[
-                    "estado",
-                    "decidido_por",
-                    "decidido_en",
-                    "actualizado_en",
-                ]
-            )
-
-            # TODO(Etapa 3): reemplazar por applications.services.aceptar_postulacion()
-            vacante.cupos_ocupados += 1
-            # El trigger de la base pone la vacante en 'cubierta' al llenarse
-            # los cupos; hasta que exista la membresía de equipo lo mantenemos
-            # nosotros con la misma regla.
-            if vacante.cupos_ocupados >= vacante.cupos_totales:
-                vacante.estado = Vacante.ESTADO_CUBIERTA
-            vacante.save(
-                update_fields=["cupos_ocupados", "estado", "actualizado_en"]
-            )
+                membresia = aceptar_postulacion(postulacion, request.user, motivo="")
+        except VacanteSinCupo as exc:
+            messages.error(request, str(exc))
+            return redirect(destino)
+        except PostulacionNoAceptable as exc:
+            messages.error(request, str(exc))
+            return redirect(destino)
+        except CargaIncompatible as exc:
+            messages.error(request, str(exc))
+            return redirect(destino)
 
         messages.success(
             request,
-            f"¡Has aprobado a {_nombre_candidato(postulacion.postulante)}! "
+            f"¡Has aprobado a {_nombre_candidato(membresia.usuario)}! "
             "El cupo ha sido ocupado.",
         )
         return redirect(destino)
@@ -1071,29 +1049,48 @@ class RechazarPostulacionView(LoginRequiredMixin, View):
             pk=pk,
         )
         proyecto = postulacion.vacante.proyecto
+        vacante = postulacion.vacante
 
         if request.user.id != proyecto.creador_id:
             return JsonResponse({"error": "No autorizado"}, status=403)
 
-        if postulacion.estado not in ESTADOS_RECHAZABLES:
-            return JsonResponse(
-                {
-                    "error": "Solo se pueden rechazar postulaciones pendientes "
-                    "o preseleccionadas."
-                },
-                status=400,
-            )
+        try:
+            with transaction.atomic():
+                postulacion = Postulacion.objects.select_for_update().get(pk=postulacion.pk)
+                vacante = Vacante.objects.select_for_update().get(pk=vacante.pk)
 
-        postulacion.estado = Postulacion.ESTADO_RECHAZADA
-        postulacion.decidido_por = request.user
-        postulacion.decidido_en = timezone.now()
-        postulacion.save(
-            update_fields=[
-                "estado",
-                "decidido_por",
-                "decidido_en",
-                "actualizado_en",
-            ]
-        )
+                if postulacion.estado not in ESTADOS_RECHAZABLES:
+                    return JsonResponse(
+                        {
+                            "error": "Solo se pueden rechazar postulaciones pendientes "
+                            "o preseleccionadas."
+                        },
+                        status=400,
+                    )
+
+                if not vacante.es_activo or vacante.estado == Vacante.ESTADO_CANCELADA:
+                    return JsonResponse(
+                        {"error": "Esta vacante ya no está disponible."},
+                        status=400,
+                    )
+                if proyecto.estado in ESTADOS_CERRADOS:
+                    return JsonResponse(
+                        {"error": "El proyecto ya no admite cambios en postulaciones."},
+                        status=400,
+                    )
+
+                postulacion.estado = Postulacion.ESTADO_RECHAZADA
+                postulacion.decidido_por = request.user
+                postulacion.decidido_en = timezone.now()
+                postulacion.save(
+                    update_fields=[
+                        "estado",
+                        "decidido_por",
+                        "decidido_en",
+                        "actualizado_en",
+                    ]
+                )
+        except Exception:
+            return JsonResponse({"error": "Error al procesar el rechazo."}, status=500)
 
         return JsonResponse({"ok": True})
