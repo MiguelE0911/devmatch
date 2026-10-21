@@ -121,10 +121,16 @@
                         {% if postulacion.estado == 'pendiente' or postulacion.estado == 'preseleccionada' %}
                             <form action="{% url 'applications:retirar_postulacion' postulacion.pk %}" method="POST">
                                 {% csrf_token %}
-                                <button type="submit" onclick="return confirm('¿Estás segura de retirar esta postulación?')" class="px-5 py-2.5 bg-violet-700 hover:bg-violet-800 text-white rounded-xl text-sm font-semibold transition-all whitespace-nowrap">
+                                <button type="submit" onclick="return confirm('¿Retirar esta postulación? Esta acción no se puede deshacer.')" class="px-5 py-2.5 bg-violet-700 hover:bg-violet-800 text-white rounded-xl text-sm font-semibold transition-all whitespace-nowrap">
                                     Retirar Postulación
                                 </button>
                             </form>
+                        {% elif postulacion.estado == 'retirada' %}
+                            <span class="text-xs text-slate-400 italic text-center">Retiraste esta postulación</span>
+                        {% elif postulacion.estado == 'aceptada' %}
+                            <span class="text-xs text-slate-400 italic text-center">Ya formas parte de este proyecto</span>
+                        {% elif postulacion.estado == 'rechazada' %}
+                            <span class="text-xs text-slate-400 italic text-center">No fuiste seleccionado/a</span>
                         {% else %}
                             <span class="text-xs text-slate-400 italic text-center">Postulación en estado final</span>
                         {% endif %}

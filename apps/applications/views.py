@@ -1,12 +1,77 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.defaultfilters import floatformat
+from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from apps.applications.models import Postulacion
+from apps.applications.services import (
+    ConfiguracionPesosNoDisponibleError,
+    PostulacionDuplicadaError,
+    VacanteNoPostulable,
+    crear_postulacion,
+)
+from apps.projects.models import Proyecto, Vacante
 
 ESTADOS_RETIRABLES = (Postulacion.ESTADO_PENDIENTE, Postulacion.ESTADO_PRESELECCIONADA)
+
+
+@login_required
+@require_POST
+def postular_postulacion_view(request, pk):
+    """
+    Crea una postulación real del usuario a una vacante, con el Match Score
+    congelado en el instante de postularse (CR-07, vía services.crear_postulacion).
+
+    El servicio valida vacante abierta/activa, proyecto no cerrado y
+    unicidad de postulación activa. La visibilidad del proyecto (borrador
+    oculto a terceros) es regla de las vistas: aquí se aplica igual que en
+    ProyectoDetailView, y el dueño nunca puede postularse a lo suyo.
+    """
+    vacante = get_object_or_404(
+        Vacante.objects.select_related("proyecto"), pk=pk, es_activo=True
+    )
+    proyecto = vacante.proyecto
+    destino = request.POST.get("next") or ""
+    if not url_has_allowed_host_and_scheme(
+        destino, allowed_hosts={request.get_host()}
+    ):
+        destino = reverse("projects:project_detail", args=[proyecto.pk])
+
+    # Borrador: no visible para terceros (misma regla que el detalle).
+    if proyecto.estado == Proyecto.ESTADO_BORRADOR and proyecto.creador != request.user:
+        raise Http404
+    if proyecto.creador == request.user:
+        messages.error(request, "No puedes postularte a tu propio proyecto.")
+        return redirect(destino)
+
+    try:
+        postulacion = crear_postulacion(request.user, vacante)
+    except PostulacionDuplicadaError:
+        messages.error(
+            request, "Ya tienes una postulación activa a esta vacante."
+        )
+        return redirect(destino)
+    except VacanteNoPostulable:
+        messages.error(request, "Esta vacante ya no admite postulaciones.")
+        return redirect(destino)
+    except ConfiguracionPesosNoDisponibleError:
+        messages.error(
+            request,
+            "No se pudo calcular tu Match Score. Inténtalo más tarde.",
+        )
+        return redirect(destino)
+
+    messages.success(
+        request,
+        "¡Postulación enviada! Tu Match Score para "
+        f"«{vacante.titulo}» es de {floatformat(postulacion.match_score, 0)}%.",
+    )
+    return redirect(destino)
 
 
 @login_required

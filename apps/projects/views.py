@@ -15,6 +15,7 @@ from django.views.generic import CreateView, DetailView, UpdateView
 from apps.matching.engine import calcular_match_score
 from apps.matching.models import ConfiguracionPesosMatching
 from apps.applications.services import construir_perfil_matching, construir_vacante_matching
+from apps.applications.models import Postulacion
 
 from .forms import ProyectoForm, ProyectoMediaForm, VacanteForm
 from .models import Proyecto, ProyectoMedia, Vacante
@@ -25,6 +26,13 @@ from .services import (
     cambiar_estado,
     puede_agregar_imagenes,
     puede_agregar_vacantes,
+)
+
+# Estados que cuentan como "postulación activa" para bloquear una nueva
+# (espejo del índice ux_postulacion_activa_unica en el esquema).
+ESTADOS_POSTULACION_ACTIVA = (
+    Postulacion.ESTADO_PENDIENTE,
+    Postulacion.ESTADO_PRESELECCIONADA,
 )
 
 
@@ -132,6 +140,19 @@ def datos_laterales(proyecto, usuario):
             }
             perfil_matching = construir_perfil_matching(usuario)
 
+    # Vacantes a las que el usuario ya tiene una postulación activa: no puede
+    # volver a postularse (espejo de ux_postulacion_activa_unica; tras un
+    # rechazo o retiro vuelve a habilitarse el botón).
+    vacantes_ya_postuladas = set()
+    if usuario.is_authenticated:
+        vacantes_ya_postuladas = set(
+            Postulacion.objects.filter(
+                postulante=usuario,
+                vacante__in=vacantes,
+                estado__in=ESTADOS_POSTULACION_ACTIVA,
+            ).values_list("vacante_id", flat=True)
+        )
+
     for vacante in vacantes:
         vacante.habilidades = [
             r.habilidad
@@ -154,9 +175,9 @@ def datos_laterales(proyecto, usuario):
             else 0
         )
         # El botón "Postularme" se habilita solo si hay cupo, no es el dueño,
-        # el proyecto sigue abierto (finalizado/cancelado ya no reclutan) y la
-        # vacante está abierta. El mensaje del botón deshabilitado explica por
-        # qué. La vista Dueño lo mantiene deshabilitado.
+        # el proyecto sigue abierto (finalizado/cancelado ya no reclutan), la
+        # vacante está abierta y el usuario no tiene ya una postulación activa.
+        # El mensaje del botón deshabilitado explica por qué.
         proyecto_abierto = proyecto.estado not in ESTADOS_CERRADOS
         vacante.puede_postularse = (
             usuario.is_authenticated
@@ -164,6 +185,7 @@ def datos_laterales(proyecto, usuario):
             and proyecto_abierto
             and vacante.cupos_libres > 0
             and vacante.estado == Vacante.ESTADO_ABIERTA
+            and vacante.id not in vacantes_ya_postuladas
         )
         if not proyecto_abierto:
             vacante.motivo_no_postularse = (
@@ -173,6 +195,8 @@ def datos_laterales(proyecto, usuario):
             vacante.motivo_no_postularse = "Eres el creador de este proyecto"
         elif not usuario.is_authenticated:
             vacante.motivo_no_postularse = "Inicia sesión para postularte"
+        elif vacante.id in vacantes_ya_postuladas:
+            vacante.motivo_no_postularse = "Ya tienes una postulación activa"
         else:
             vacante.motivo_no_postularse = "Publicación completa"
 
