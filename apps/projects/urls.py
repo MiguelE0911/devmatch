@@ -77,7 +77,7 @@ urlpatterns = [
         name="aprobar_postulacion",
     ),
     path(
-            "postulacion/<int:pk>/aprobar/",
+            "postulacion/<int:pk>/rechazar/",
             views.RechazarPostulacionView.as_view(),
             name="rechazar_postulacion",
         ),
