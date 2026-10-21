@@ -234,6 +234,23 @@ class SeedInvariantesEstadoTests(TestCase):
             ).exists()
         )
 
+    def test_recorrida_no_reduce_cupos_ni_deja_llena_abierta(self):
+        """Vacante legada con cupos_ocupados > fixture (membresías de testers
+        con el trigger deshabilitado, caso PetMatch en Neon 4/2): la
+        re-corrida no reduce cupos_totales por debajo de lo ocupado (si no,
+        chk_cupos_no_exceden abortaría el seed entero) y deja la vacante llena
+        como 'cubierta', no como 'abierta'."""
+        vac = Vacante.objects.get(
+            proyecto__nombre__startswith="PetMatch", titulo="Fullstack Developer"
+        )
+        Vacante.objects.filter(pk=vac.pk).update(cupos_totales=4, cupos_ocupados=4)
+
+        correr_seed(self.ahora)  # no debe violar chk_cupos_no_exceden
+
+        vac.refresh_from_db()
+        self.assertGreaterEqual(vac.cupos_totales, vac.cupos_ocupados)
+        self.assertEqual(vac.estado, Vacante.ESTADO_CUBIERTA)
+
     def test_drift_a_terminal_no_crash_y_normaliza(self):
         """Proyecto seed que cayó en estado terminal (p. ej. reset manual en
         Neon): no se revierte ni se reactiva, y sus vacantes abiertas (incluida
