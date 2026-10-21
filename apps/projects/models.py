@@ -60,21 +60,6 @@ class Proyecto(models.Model):
 
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)  # también hay trigger fn_set_updated_at
-
-    @property
-    def cantidad_aprobados(self):
-        return self.postulaciones.filter(estado='Aprobado').count()
-
-    @property
-    def porcentaje_cupos(self):
-        if self.cupos == 0:
-            return 0
-        porcentaje = (self.cantidad_aprobados / self.cupos) * 100
-        return min(int(porcentaje), 100)
-
-    @property
-    def sin_cupos_disponibles(self):
-        return self.cantidad_aprobados >= self.cupos
     class Meta:
         db_table = "proyectos"
 
@@ -153,6 +138,20 @@ class Vacante(models.Model):
     def tiene_cupo_libre(self):
         return self.cupos_ocupados < self.cupos_totales
 
+    @property
+    def cantidad_aprobados(self):
+        return self.postulaciones.filter(estado='aceptada').count()
+
+    @property
+    def porcentaje_cupos(self):
+        if self.cupos_totales == 0:
+            return 0
+        porcentaje = (self.cantidad_aprobados / self.cupos_totales) * 100
+        return min(int(porcentaje), 100)
+
+    @property
+    def sin_cupos_disponibles(self):
+        return self.cantidad_aprobados >= self.cupos_totales
 
 # ---------------------------------------------------------------------------
 # PROYECTO MEDIA

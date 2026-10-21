@@ -916,11 +916,16 @@ class PreseleccionarPostulacionView(LoginRequiredMixin, View):
     http_method_names = ["post"]
 
     def post(self, request, pk):
+        from apps.applications.models import Postulacion
         postulacion = get_object_or_404(Postulacion, pk=pk)
         proyecto = postulacion.vacante.proyecto
         
         if request.user.id != proyecto.creador_id:
             messages.error(request, "No tienes permisos para realizar esta acción.")
+            return redirect("projects:mis_proyectos")
+
+        if postulacion.estado != Postulacion.ESTADO_PENDIENTE:
+            messages.error(request, "Solo se pueden preseleccionar postulaciones en estado pendiente.")
             return redirect("projects:mis_proyectos")
 
         postulacion.estado = Postulacion.ESTADO_PRESELECCIONADA 
@@ -976,6 +981,7 @@ class AprobarPostulacionView(LoginRequiredMixin, View):
     http_method_names = ["post"]
 
     def post(self, request, pk):
+        from apps.applications.models import Postulacion
         postulacion = get_object_or_404(Postulacion, pk=pk)
         vacante = postulacion.vacante
         proyecto = vacante.proyecto
@@ -983,6 +989,12 @@ class AprobarPostulacionView(LoginRequiredMixin, View):
         if request.user.id != proyecto.creador_id:
             messages.error(request, "No tienes permisos para realizar esta acción.")
             return redirect("projects:mis_proyectos")
+
+        if postulacion.estado != Postulacion.ESTADO_PRESELECCIONADA:
+            messages.error(request, "Solo se pueden aprobar postulaciones que estén preseleccionadas.")
+            return redirect(
+                reverse("projects:project_detail", kwargs={"pk": proyecto.pk}) + "?tab=vacantes"
+            )
 
         if vacante.cupos_ocupados >= vacante.cupos_totales:
             messages.error(request, "Esta vacante ya ha alcanzado su límite de cupos.")
