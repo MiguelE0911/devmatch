@@ -26,7 +26,7 @@ sobrescribe {% block sidebar %} en base.html con vacío.
             <span class="text-xs font-bold text-violet-700">Proyectos</span>
         </a>
 
-        <a href="#" class="group flex w-full flex-col items-center gap-1.5" title="Postulaciones">
+        <a href="{% url 'applications:mis_postulaciones' %}" class="group flex w-full flex-col items-center gap-1.5" title="Postulaciones">
             <span class="flex h-11 w-11 items-center justify-center rounded-[14px] text-violet-700 transition-colors group-hover:bg-violet-100">
                 <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="m22 2-7 20-4-9-9-4Z"/>
