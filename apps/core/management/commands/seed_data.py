@@ -524,18 +524,24 @@ class Command(BaseCommand):
                     },
                 )
                 if not _creada:
+                    # Nunca reducir cupos_totales por debajo de cupos_ocupados:
+                    # una vacante con membresías legadas (p. ej. testers con el
+                    # trigger deshabilitado) violaría chk_cupos_no_exceden y
+                    # abortaría el seed completo (caso PetMatch en Neon: 4/2).
+                    vac.cupos_totales = max(
+                        vacante["cupos_totales"], vac.cupos_ocupados
+                    )
                     nuevo_estado = estado_deseado
                     # fn_actualizar_cupos_vacante marca 'cubierta' al llenarse
-                    # los cupos; una re-corrida no debe destruir ese estado.
+                    # los cupos; una re-corrida no debe destruir ese estado ni
+                    # dejar una vacante llena como 'abierta'.
                     if (
                         nuevo_estado == Vacante.ESTADO_ABIERTA
-                        and vac.estado == Vacante.ESTADO_CUBIERTA
                         and vac.cupos_ocupados >= vac.cupos_totales
                     ):
                         nuevo_estado = Vacante.ESTADO_CUBIERTA
                     if vac.estado != nuevo_estado:
                         vac.estado = nuevo_estado
-                    vac.cupos_totales = vacante["cupos_totales"]
                     vac.es_activo = True
                     vac.save(update_fields=["estado", "cupos_totales", "es_activo"])
                 self._fijar(
