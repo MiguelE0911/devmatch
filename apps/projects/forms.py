@@ -364,8 +364,13 @@ class VacanteForm(forms.ModelForm):
                 for bridge in self.instance.vacantetecnologiarequerida_set.all()
             ]
         if include_estado:
+            opciones_permitidas = [
+                (v, e) for v, e in Vacante.ESTADO_CHOICES 
+                if v in (Vacante.ESTADO_ABIERTA, getattr(Vacante, 'ESTADO_CANCELADA', 'cancelada'))
+            ]
+
             self.fields["estado"] = forms.ChoiceField(
-                choices=Vacante.ESTADO_CHOICES,
+                choices=opciones_permitidas,
                 initial=(
                     self.instance.estado if self.instance.pk else Vacante.ESTADO_ABIERTA
                 ),
@@ -376,6 +381,16 @@ class VacanteForm(forms.ModelForm):
                     }
                 ),
             )
+
+    def clean_estado(self):
+        estado = self.cleaned_data.get("estado")
+        estado_cubierta = getattr(Vacante, 'ESTADO_CUBIERTA', 'cubierta')
+        
+        if estado == estado_cubierta:
+            raise forms.ValidationError(
+                "El estado 'Cubierta' lo asigna el sistema al llenarse los cupos"
+            )
+        return estado
 
     def clean_cupos_totales(self):
         cupos = self.cleaned_data.get("cupos_totales")

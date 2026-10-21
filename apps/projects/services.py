@@ -313,3 +313,9 @@ def actualizar_vacante(
         )
         sincronizar_requisitos(vacante, habilidades, tecnologias)
     return vacante
+
+def esta_abierta(vacante) -> bool:
+    return vacante.estado == Vacante.ESTADO_ABIERTA
+
+def tiene_cupo_libre(vacante) -> bool:
+    return (vacante.cupos_totales - vacante.cupos_ocupados) > 0

@@ -34,6 +34,8 @@ from .services import (
     cambiar_estado,
     puede_agregar_imagenes,
     puede_agregar_vacantes,
+    esta_abierta,
+    tiene_cupo_libre,
 )
 
 
@@ -173,6 +175,9 @@ def datos_laterales(proyecto, usuario):
             else 0
         )
         
+        vacante.is_abierta = esta_abierta(vacante)
+        vacante.tiene_cupo = tiene_cupo_libre(vacante)
+        
         # Verificamos postulación y si el proyecto está RECLUTANDO
         ya_postulado = vacante.id in vacantes_postuladas_ids
         esta_reclutando = proyecto.estado == Proyecto.ESTADO_RECLUTANDO
@@ -181,8 +186,8 @@ def datos_laterales(proyecto, usuario):
             usuario.is_authenticated
             and not es_dueno
             and esta_reclutando
-            and vacante.cupos_libres > 0
-            and vacante.estado == Vacante.ESTADO_ABIERTA
+            and vacante.tiene_cupo
+            and vacante.is_abierta
             and not ya_postulado
         )
         
@@ -311,12 +316,13 @@ class VacancyCreateView(LoginRequiredMixin, CreateView):
                 request, "Solo el creador del proyecto puede agregar vacantes."
             )
             return redirect("projects:project_detail", pk=self.proyecto.pk)
+            
         if request.method in ("GET", "HEAD") and not puede_agregar_vacantes(
             self.proyecto
         ):
             messages.error(
                 request,
-                "No se pueden agregar vacantes a un proyecto en estado "
+                "No se pueden gestionar vacantes en un proyecto en estado "
                 f"«{self.proyecto.get_estado_display()}».",
             )
             return redirect(
@@ -340,7 +346,8 @@ class VacancyCreateView(LoginRequiredMixin, CreateView):
         form.instance.es_activo = True
         try:
             return super().form_valid(form)
-        except VacanteInvalida as exc:
+        # Sumamos ValidationError a la captura de excepciones
+        except (VacanteInvalida, ValidationError) as exc:
             # Regla de negocio del servicio (p. ej. proyecto finalizado o
             # cancelado, cupos, estado de vacante): se muestra como error no
             # de campo del formulario (200) y no se crea la vacante. El
@@ -386,6 +393,15 @@ class VacancyUpdateView(LoginRequiredMixin, UpdateView):
             return redirect(
                 "projects:project_detail", pk=vacante.proyecto.pk
             )
+            
+        if not puede_agregar_vacantes(vacante.proyecto):
+            messages.error(
+                request, 
+                "No se pueden editar vacantes en un proyecto en estado "
+                f"«{vacante.proyecto.get_estado_display()}»."
+            )
+            return redirect("projects:project_detail", pk=vacante.proyecto.pk)
+            
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
@@ -409,7 +425,7 @@ class VacancyUpdateView(LoginRequiredMixin, UpdateView):
     def form_valid(self, form):
         try:
             response = super().form_valid(form)
-        except VacanteInvalida as exc:
+        except (VacanteInvalida, ValidationError) as exc:
             form.add_error(None, str(exc))
             return self.form_invalid(form)
         messages.success(
@@ -448,6 +464,13 @@ class VacancyDeleteView(LoginRequiredMixin, View):
         if request.user.id != proyecto.creador_id:
             messages.error(
                 request, "Solo el creador del proyecto puede desactivar la vacante."
+            )
+            return redirect("projects:project_detail", pk=proyecto.pk)
+
+        if not puede_agregar_vacantes(proyecto):
+            messages.error(
+                request, 
+                "No se pueden eliminar vacantes si el proyecto ya finalizó o se canceló."
             )
             return redirect("projects:project_detail", pk=proyecto.pk)
 
@@ -939,6 +962,8 @@ class PostularseVacanteView(LoginRequiredMixin, View):
             messages.error(request, str(e))
         except ConfiguracionPesosNoDisponibleError:
             messages.error(request, "El sistema de matching no está configurado temporalmente.")
+        except ValidationError as e:
+            messages.error(request, str(e.message) if hasattr(e, 'message') else str(e))
         except Exception:
             messages.error(request, "Ocurrió un error inesperado al procesar tu postulación.")
 
