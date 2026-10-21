@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db import transaction
 from django.urls import reverse_lazy
 from django.views.generic import TemplateView
 from django.views.generic.edit import CreateView, UpdateView
@@ -195,49 +196,50 @@ class ProfileEditView(LoginRequiredMixin, UpdateView):
         # Sincroniza las tres tablas puente: DELETE de lo deseleccionado e
         # INSERT de lo nuevo (los puentes sí permiten borrado físico, no así
         # los catálogos — ver docs/DEVMATCH-BD.md).
-        habilidades_previas = set(
-            UsuarioHabilidad.objects.filter(usuario=self.request.user).values_list(
-                "habilidad_id", flat=True
+        with transaction.atomic():
+            habilidades_previas = set(
+                UsuarioHabilidad.objects.filter(usuario=self.request.user).values_list(
+                    "habilidad_id", flat=True
+                )
             )
-        )
-        tecnologias_previas = set(
-            UsuarioTecnologia.objects.filter(usuario=self.request.user).values_list(
-                "tecnologia_id", flat=True
+            tecnologias_previas = set(
+                UsuarioTecnologia.objects.filter(usuario=self.request.user).values_list(
+                    "tecnologia_id", flat=True
+                )
             )
-        )
-        intereses_previos = set(
-            UsuarioInteres.objects.filter(usuario=self.request.user).values_list(
-                "interes_id", flat=True
-            )
-        )
-
-        response = super().form_valid(form)
-
-        habilidades_nuevas = {h.pk for h in form.cleaned_data["habilidades"]}
-        tecnologias_nuevas = {t.pk for t in form.cleaned_data["tecnologias"]}
-        intereses_nuevos = {i.pk for i in form.cleaned_data["intereses"]}
-
-        UsuarioHabilidad.objects.filter(
-            usuario=self.request.user, habilidad_id__in=habilidades_previas - habilidades_nuevas
-        ).delete()
-        for pk in habilidades_nuevas - habilidades_previas:
-            UsuarioHabilidad.objects.get_or_create(
-                usuario=self.request.user, habilidad_id=pk
+            intereses_previos = set(
+                UsuarioInteres.objects.filter(usuario=self.request.user).values_list(
+                    "interes_id", flat=True
+                )
             )
 
-        UsuarioTecnologia.objects.filter(
-            usuario=self.request.user, tecnologia_id__in=tecnologias_previas - tecnologias_nuevas
-        ).delete()
-        for pk in tecnologias_nuevas - tecnologias_previas:
-            UsuarioTecnologia.objects.get_or_create(
-                usuario=self.request.user, tecnologia_id=pk
-            )
+            response = super().form_valid(form)
 
-        UsuarioInteres.objects.filter(
-            usuario=self.request.user, interes_id__in=intereses_previos - intereses_nuevos
-        ).delete()
-        for pk in intereses_nuevos - intereses_previos:
-            UsuarioInteres.objects.get_or_create(usuario=self.request.user, interes_id=pk)
+            habilidades_nuevas = {h.pk for h in form.cleaned_data["habilidades"]}
+            tecnologias_nuevas = {t.pk for t in form.cleaned_data["tecnologias"]}
+            intereses_nuevos = {i.pk for i in form.cleaned_data["intereses"]}
+
+            UsuarioHabilidad.objects.filter(
+                usuario=self.request.user, habilidad_id__in=habilidades_previas - habilidades_nuevas
+            ).delete()
+            for pk in habilidades_nuevas - habilidades_previas:
+                UsuarioHabilidad.objects.get_or_create(
+                    usuario=self.request.user, habilidad_id=pk
+                )
+
+            UsuarioTecnologia.objects.filter(
+                usuario=self.request.user, tecnologia_id__in=tecnologias_previas - tecnologias_nuevas
+            ).delete()
+            for pk in tecnologias_nuevas - tecnologias_previas:
+                UsuarioTecnologia.objects.get_or_create(
+                    usuario=self.request.user, tecnologia_id=pk
+                )
+
+            UsuarioInteres.objects.filter(
+                usuario=self.request.user, interes_id__in=intereses_previos - intereses_nuevos
+            ).delete()
+            for pk in intereses_nuevos - intereses_previos:
+                UsuarioInteres.objects.get_or_create(usuario=self.request.user, interes_id=pk)
 
         messages.success(self.request, "Tu perfil se guardó correctamente.")
         return response

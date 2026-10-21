@@ -60,7 +60,6 @@ class Proyecto(models.Model):
 
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)  # también hay trigger fn_set_updated_at
-
     class Meta:
         db_table = "proyectos"
 
@@ -120,10 +119,39 @@ class Vacante(models.Model):
 
     class Meta:
         db_table = "vacantes"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(cupos_ocupados__lte=models.F("cupos_totales")),
+                name="chk_cupos_no_exceden",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.titulo} ({self.proyecto.nombre})"
 
+    @property
+    def esta_abierta(self):
+        """Admite postulaciones: estado 'abierta' y no oculta."""
+        return self.estado == self.ESTADO_ABIERTA and self.es_activo
+
+    @property
+    def tiene_cupo_libre(self):
+        return self.cupos_ocupados < self.cupos_totales
+
+    @property
+    def cantidad_aprobados(self):
+        return self.postulaciones.filter(estado='aceptada').count()
+
+    @property
+    def porcentaje_cupos(self):
+        if self.cupos_totales == 0:
+            return 0
+        porcentaje = (self.cantidad_aprobados / self.cupos_totales) * 100
+        return min(int(porcentaje), 100)
+
+    @property
+    def sin_cupos_disponibles(self):
+        return self.cantidad_aprobados >= self.cupos_totales
 
 # ---------------------------------------------------------------------------
 # PROYECTO MEDIA
@@ -132,10 +160,11 @@ class Vacante(models.Model):
 
 class ProyectoMedia(models.Model):
     """
-    Tabla `proyecto_media`: logos y prototipos (procesados con Pillow más
-    adelante). A diferencia de proyectos/vacantes, es un adjunto y no un
-    registro crítico de negocio: no tiene actualizado_en ni
-    desactivado_por_id (ver DevMatch-BD, 5.2).
+    Tabla `proyecto_media`: logos y prototipos. La subida real se procesa con
+    Pillow (apps/projects/media_utils.py) y `archivo_url` guarda la ruta
+    relativa /media/... resultante o una URL externa pegada. A diferencia de
+    proyectos/vacantes, es un adjunto y no un registro crítico de negocio: no
+    tiene actualizado_en ni desactivado_por_id (ver DevMatch-BD, 5.2).
     """
 
     TIPO_LOGO = "logo"

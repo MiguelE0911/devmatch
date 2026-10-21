@@ -1,19 +1,19 @@
 /* Panel de filtros del Home interno (feed). Contrato con core/_filters_panel.html:
    - 6 filas [data-filtro-toggle] con submenu [data-submenu] hermano.
-   - Tipos: multiselect-search ([data-item-multi], [data-busqueda], [data-bandeja]),
-     single-select-list ([data-item-single]) y stepper ([data-stepper-input],
-     [data-stepper-up/down]).
+   - Tipos: multiselect-search ([data-item-multi], [data-busqueda], [data-bandeja],
+     [data-param] con el nombre del parámetro), single-select-list ([data-item-single])
+     y stepper ([data-stepper-input], [data-stepper-up/down]).
    - El estado se guarda en inputs hidden del <form> (name habilidad/tecnologia/
-     nivel/experiencia/estado_vacante/estado) y el formulario se auto-aplica
-     (submit) al cambiar → el filtrado lo hace el servidor vía GET.
+     nivel/experiencia/estado_vacante/estado). Los cambios NO se aplican solos:
+     se confirman con el botón de submit "Aplicar filtros" (el filtrado lo hace
+     el servidor vía GET). [data-limpiar-filtros] devuelve el panel a su estado
+     por defecto SIN recargar (para elegir otros filtros antes de aplicar).
    - La topbar aporta [data-filters-toggle]; si no existe (páginas sin feed),
      el script se inhabilita solo. Vanilla JS — no usar librerías. */
 (function () {
     var panel = document.querySelector("[data-panel-filtros]");
     var toggle = document.querySelector("[data-filters-toggle]");
     if (!panel || !toggle) return;
-
-    var form = panel.querySelector("form");
 
     // ------------------------------------------------------------------ abrir/cerrar panel
     function posicionarPanel() {
@@ -81,10 +81,52 @@
         });
     });
 
-    // ------------------------------------------------------------------ auto-aplicar
-    function aplicar() {
-        if (form) form.submit();
+    // ------------------------------------------------------------------ pie: limpiar
+    // Los cambios NO se aplican solos: el botón de submit ("Aplicar filtros")
+    // confirma los filtros. "Limpiar" solo devuelve el panel a su estado por
+    // defecto (sin recargar), para poder elegir otros filtros antes de aplicar.
+    function limpiarFiltros() {
+        panel.querySelectorAll("[data-submenu]").forEach(function (submenu) {
+            var fila = submenu.parentElement;
+
+            // Multiselect-search: el parámetro viene de data-param.
+            var nombre = submenu.dataset.param;
+            if (nombre) {
+                opcionesMulti(submenu, nombre).forEach(function (input) {
+                    input.remove();
+                });
+                sincronizarMulti(fila, submenu, nombre);
+                return;
+            }
+
+            // Stepper (experiencia).
+            var stepper = submenu.querySelector("[data-stepper-input]");
+            if (stepper) {
+                stepper.value = "0";
+                var anios = submenu.querySelector("[data-experiencia-value]");
+                if (anios) anios.value = "";
+                var valorStepper = fila.querySelector("[data-filtro-valor]");
+                if (valorStepper) valorStepper.textContent = "—";
+                return;
+            }
+
+            // Single-select-list (nivel / estado_vacante / estado).
+            var hidden = submenu.querySelector('input[type="hidden"]');
+            if (!hidden) return;
+            hidden.value = "";
+            submenu.querySelectorAll("[data-item-single]").forEach(function (opcion) {
+                var activa = opcion.value === "";
+                opcion.classList.toggle("font-bold", activa);
+                opcion.classList.toggle("text-violet-700", activa);
+                opcion.classList.toggle("text-slate-700", !activa);
+            });
+            var valorSingle = fila.querySelector("[data-filtro-valor]");
+            if (valorSingle) valorSingle.textContent = "Cualquiera";
+        });
     }
+
+    var limpiar = panel.querySelector("[data-limpiar-filtros]");
+    if (limpiar) limpiar.addEventListener("click", limpiarFiltros);
 
     // ------------------------------------------------------------------ multiselect-search
     panel.querySelectorAll("[data-busqueda]").forEach(function (busqueda) {
@@ -101,6 +143,9 @@
     });
 
     function nombreParametroMulti(submenu) {
+        /* El nombre del parámetro es fijo (data-param): derivarlo del primer
+           hidden falla en el primer clic, cuando aún no hay ninguno renderizado. */
+        if (submenu.dataset.param) return submenu.dataset.param;
         var hidden = submenu.querySelector('input[type="hidden"]');
         return hidden ? hidden.name : "";
     }
@@ -210,7 +255,6 @@
             }
             var fila = submenu.parentElement;
             sincronizarMulti(fila, submenu, nombre);
-            aplicar();
         });
     });
 
@@ -226,7 +270,6 @@
         sincronizarMulti(fila, submenu, nombre);
         // Reabre el submenú si se quitó desde la bandeja visible de otra fila.
         submenu.classList.remove("hidden");
-        aplicar();
     });
 
     // ------------------------------------------------------------------ single-select-list
@@ -256,7 +299,6 @@
 
             var valor = submenu.parentElement.querySelector("[data-filtro-valor]");
             if (valor) valor.textContent = etiqueta;
-            aplicar();
         });
     });
 
@@ -282,7 +324,6 @@
                 e.stopPropagation();
                 input.value = String((parseInt(input.value, 10) || 0) + 1);
                 anios();
-                aplicar();
             });
         }
         if (down) {
@@ -290,12 +331,10 @@
                 e.stopPropagation();
                 input.value = String(Math.max(0, (parseInt(input.value, 10) || 0) - 1));
                 anios();
-                aplicar();
             });
         }
         input.addEventListener("change", function () {
             anios();
-            aplicar();
         });
     });
 })();

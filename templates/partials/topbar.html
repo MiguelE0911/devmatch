@@ -13,7 +13,13 @@ Colores: bg-app-navbar (#333074), buscador bg-app-search (#5B56A5).
             </a>
         </div>
 
-        <div class="flex w-full items-center gap-1">
+        <form method="get" action="{% url 'core:feed' %}" role="search"
+              data-busqueda data-busqueda-url="{% url 'core:buscar_proyectos' %}"
+              class="flex w-full items-center gap-1">
+            {% comment %}Conserva los filtros activos del feed al enviar el término.{% endcomment %}
+            {% for nombre, valor in query_items_busqueda %}
+            <input type="hidden" name="{{ nombre }}" value="{{ valor }}">
+            {% endfor %}
             <div class="relative w-full">
                 <span class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/80">
                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -21,20 +27,47 @@ Colores: bg-app-navbar (#333074), buscador bg-app-search (#5B56A5).
                         <path d="m20 20-3.5-3.5"/>
                     </svg>
                 </span>
-                <input type="search" name="q" placeholder="Buscar proyectos, usuarios o tecnologías..."
+                <input type="search" name="q" value="{{ request.GET.q }}" data-busqueda-input
+                       autocomplete="off" placeholder="Buscar proyectos, usuarios o tecnologías..."
                        class="w-full appearance-none rounded-full border-0 bg-app-search py-2.5 pl-11 pr-4 text-sm text-white placeholder-violet-200 caret-white focus:outline-none focus:ring-2 focus:ring-violet-300">
+                <div data-busqueda-panel role="listbox" aria-label="Sugerencias de proyectos"
+                     class="hidden absolute left-0 right-0 top-full z-40 mt-2 max-h-96 overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1 shadow-lg"></div>
             </div>
+            {% comment %}
+            El panel de filtros solo existe en el feed: fuera de `core:feed` el
+            botón no tendría a qué apuntar, así que no se renderiza (evita un
+            botón muerto en el resto de vistas).
+            {% endcomment %}
+            {% if request.resolver_match.view_name == "core:feed" %}
             <button type="button"
-                    {% if request.resolver_match.view_name == "core:feed" %}
                     data-filters-toggle aria-expanded="false"
-                    {% endif %}
                     aria-label="Filtros"
                     class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-colors hover:bg-white/10">
                 <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                     <path d="M4 6h16M7 12h10M10 18h4"/>
                 </svg>
             </button>
-        </div>
+            {% endif %}
+
+            {% comment %}
+            Plantillas clonadas por static/js/topbar-search.js. Viven aquí (no en
+            el JS) para que Tailwind detecte sus clases en el build.
+            {% endcomment %}
+            <template data-busqueda-template>
+                <a data-busqueda-item href="#" role="option"
+                   class="flex items-center gap-3 px-4 py-2 text-sm transition-colors hover:bg-violet-50">
+                    <span data-item-thumb class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-violet-700 text-xs font-bold text-white">
+                        <img data-item-img src="" alt="" class="hidden h-full w-full object-contain">
+                        <span data-item-iniciales></span>
+                    </span>
+                    <span data-item-nombre class="min-w-0 flex-1 truncate font-semibold text-slate-900"></span>
+                    <span data-item-estado class="shrink-0 rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-700"></span>
+                </a>
+            </template>
+            <template data-busqueda-vacio-template>
+                <p class="px-4 py-3 text-sm text-slate-500">Sin resultados</p>
+            </template>
+        </form>
 
         <div class="flex items-center justify-end gap-3">
             <button type="button" aria-label="Notificaciones"

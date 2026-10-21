@@ -8,7 +8,7 @@ Card Biografía (Pantalla A). Si no hay bio, muestra un mensaje neutro
         <h2 id="perfil-biografia" class="text-lg font-extrabold tracking-tight text-violet-700">Biografía</h2>
     </header>
     {% if perfil.bio %}
-        <p class="max-w-prose text-sm leading-relaxed text-[#3B4A6B]">{{ perfil.bio }}</p>
+        <p class="w-full break-words text-sm leading-relaxed text-[#3B4A6B]">{{ perfil.bio }}</p>
     {% else %}
         <p class="text-sm text-[#3B4A6B]">Este usuario todavía no escribió una biografía.</p>
     {% endif %}

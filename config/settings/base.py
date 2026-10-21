@@ -54,6 +54,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "apps.core.middleware.LimiteSubidasMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     # Protección global por defecto: toda vista requiere login salvo las
@@ -61,6 +62,11 @@ MIDDLEWARE = [
     # de AuthenticationMiddleware. El admin ya marca su login como exento.
     "django.contrib.auth.middleware.LoginRequiredMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    # Protección de cuentas: cierra la sesión de usuarios bloqueados o
+    # desactivados (is_active=False) y los manda al login con mensaje.
+    # Va después de AuthenticationMiddleware (necesita request.user) y de
+    # MessageMiddleware (necesita encolar el mensaje). Feedback Etapa 1.
+    "apps.core.middleware.AccountStateMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
@@ -145,5 +151,17 @@ STATIC_ROOT = BASE_DIR / "staticfiles"  # usado solo por collectstatic en prod
  
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
- 
+
+# Neon Object Storage (bucket "public_read" del proyecto del curso). Con las 5
+# vars completas, media_utils.guardar_imagen sube las imagenes al bucket y
+# devuelve su URL publica; si falta alguna, guarda en MEDIA_ROOT local
+# (fallback: la app funciona igual, pero esas imagenes solo se ven en esta
+# maquina). La credencial se reparte por canal seguro y NUNCA se commitea.
+# Detalle del plan: bóveda -> 05 - Integraciones/Neon Object Storage.
+AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", "")
+AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
+AWS_ENDPOINT_URL_S3 = os.environ.get("AWS_ENDPOINT_URL_S3", "")
+AWS_REGION = os.environ.get("AWS_REGION", "")
+NEON_STORAGE_BUCKET = os.environ.get("NEON_STORAGE_BUCKET", "")
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

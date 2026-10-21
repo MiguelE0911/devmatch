@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from apps.projects.forms import ProyectoForm
-from apps.projects.models import Proyecto
+from apps.projects.models import Proyecto, Vacante
 from apps.projects.tests.helpers import lleva_a
 
 Usuario = get_user_model()
@@ -63,6 +63,23 @@ class ProyectoFormEstadoTests(TestCase):
         self.proyecto.refresh_from_db()
         self.assertEqual(self.proyecto.estado, Proyecto.ESTADO_FINALIZADO)
         self.assertIsNotNone(self.proyecto.finalizado_en)
+
+    def test_finalizar_por_el_form_cierra_las_vacantes_abiertas(self):
+        vacante = Vacante.objects.create(
+            proyecto=self.proyecto,
+            titulo="Backend",
+            descripcion="desc",
+            cupos_totales=2,
+        )
+        lleva_a(self.proyecto, Proyecto.ESTADO_EN_DESARROLLO)
+        form = ProyectoForm(
+            instance=self.proyecto,
+            data=self.form_datos(estado=Proyecto.ESTADO_FINALIZADO),
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+        vacante.refresh_from_db()
+        self.assertEqual(vacante.estado, Vacante.ESTADO_CANCELADA)
 
     def test_cancelado_no_es_una_opcion_editable(self):
         form = ProyectoForm(instance=self.proyecto)

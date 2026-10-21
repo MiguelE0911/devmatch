@@ -5,7 +5,8 @@ psycopg2-binary>=2.9,<3.0
 python-dotenv>=1.0,<2.0
 dj-database-url>=3.1.2
 whitenoise>=6.7,<7.0
+Pillow>=10,<13         # procesamiento de logos/prototipos subidos (media_utils)
+boto3>=1.34,<2.0       # subida de imagenes a Neon Object Storage (media_utils)
 
 # Se agregan más adelante, cuando la etapa correspondiente los necesite:
-# Pillow          -> procesamiento de logos/prototipos (proyecto_media)
 # requests        -> integración con la API de GitHub (Etapa 4)

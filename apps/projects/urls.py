@@ -6,7 +6,11 @@ from . import views
 app_name = "projects"
 
 urlpatterns = [
-
+    path(
+        "mis-proyectos/",
+        views.MisProyectosListView.as_view(),
+        name="mis_proyectos",
+    ),
     path(
         "proyectos/crear/",
         views.ProyectoCreateView.as_view(),
@@ -56,5 +60,20 @@ urlpatterns = [
         "proyectos/<int:pk>/galeria/ordenar/",
         views.ProyectoMediaReorderView.as_view(),
         name="media_reorder",
+    ),
+    path(
+        "postulaciones/<int:pk>/preseleccionar/",
+        views.PreseleccionarPostulacionView.as_view(),
+        name="preseleccionar_postulacion",
+    ),
+    path(
+        "postulacion/<int:pk>/aprobar/",
+        views.AprobarPostulacionView.as_view(),
+        name="aprobar_postulacion",
+    ),
+    path(
+        "postulacion/<int:pk>/rechazar/",
+        views.RechazarPostulacionView.as_view(),
+        name="rechazar_postulacion",
     ),
 ]

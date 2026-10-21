@@ -1,5 +1,17 @@
+from datetime import timedelta
+from decimal import Decimal
+
 from django.apps import apps as django_apps
 from django.core.management.base import BaseCommand
+from django.db import transaction
+from django.utils import timezone
+
+from apps.projects.services import (
+    ESTADOS_CERRADOS,
+    TransicionEstadoInvalida,
+    cambiar_estado,
+    cerrar_vacantes_abiertas,
+)
 
 # Contraseña de demo para TODOS los usuarios generados. Es para que Squad B
 # pueda loguearse en el frontend de prueba; no es un secreto de producción.
@@ -16,14 +28,36 @@ class Command(BaseCommand):
     Es IDEMPOTENTE: se puede correr varias veces sin duplicar filas
     (get_or_create por email / creador+nombre). NO usa borrados físicos,
     respetando los triggers de bloqueo del esquema oficial.
+
+    Fechas escalonadas: los datos demo se fechan relativos a "ahora" con
+    `_hace_dias(n)`, para que los listados ordenados por fecha (galería,
+    dashboard, "recientes" del perfil) tengan un orden verificable a simple
+    vista. Los campos auto_now_add (creado_en, postulado_en, ingreso_en)
+    ignoran el valor que se pasa a create(), así que se corrigen SIEMPRE con
+    un UPDATE posterior al get_or_create, tanto si la fila es nueva como si ya
+    existía. Cada corrida vuelve a fijar los mismos desfases relativos.
+
+    Invariantes de estado (tarjeta #36): el seed nunca deja filas que la
+    interfaz ya no pueda reproducir con los gates actuales — no hay vacantes
+    abiertas ni interacciones activas en proyectos finalizados/cancelados, y
+    una vacante llenada por el trigger de cupos permanece 'cubierta' en
+    re-corridas. Si un proyecto seed existe en BD con otro estado, se repara
+    con services.cambiar_estado (misma matriz que el trigger
+    fn_validar_transicion_proyecto); un estado terminal NO se revierte (no
+    tiene transición de salida), su proyecto no se reactiva y sus vacantes se
+    normalizan con cerrar_vacantes_abiertas. Un drift irreparable no aborta
+    el seed: se avisa por stdout y se conserva el estado actual.
     """
 
     help = "Genera datos de prueba (fixtures) para Squad B."
 
+    @transaction.atomic
     def handle(self, *args, **options):
+        # Todo o nada: si un trigger rechaza algo, la corrida no queda a medias.
         self.stdout.write(self.style.NOTICE("== DevMatch: seed_data =="))
         self.seed_usuarios()
         self.seed_proyectos()
+        self.seed_interacciones()
         self.stdout.write(self.style.SUCCESS("Datos de prueba generados correctamente."))
 
     @staticmethod
@@ -44,6 +78,19 @@ class Command(BaseCommand):
             contador += 1
         return candidato
 
+    @staticmethod
+    def _hace_dias(n):
+        """Momento de hace `n` días (puede ser fraccionario: 2.9 = 2 d 14 h)."""
+        return timezone.now() - timedelta(days=n)
+
+    @staticmethod
+    def _fijar(Modelo, pk, **campos):
+        """
+        Corrige fechas auto_now_add con un UPDATE posterior al INSERT. No toca
+        `estado`, así que no dispara los triggers de transición ni de cupos.
+        """
+        Modelo.objects.filter(pk=pk).update(**campos)
+
     # ------------------------------------------------------------------
     # USUARIOS Y PERFILES
     # ------------------------------------------------------------------
@@ -62,6 +109,7 @@ class Command(BaseCommand):
             {
                 "email": "admin@devmatch.local",
                 "username": "admin",
+                "creado_hace": 120,
                 "first_name": "Aura",
                 "last_name": "López",
                 "es_admin": True,
@@ -79,6 +127,7 @@ class Command(BaseCommand):
             {
                 "email": "maria@devmatch.local",
                 "username": "maria",
+                "creado_hace": 110,
                 "first_name": "María",
                 "last_name": "Gutiérrez",
                 "es_admin": False,
@@ -96,6 +145,7 @@ class Command(BaseCommand):
             {
                 "email": "juan@devmatch.local",
                 "username": "juan",
+                "creado_hace": 105,
                 "first_name": "Juan",
                 "last_name": "Pérez",
                 "es_admin": False,
@@ -113,6 +163,7 @@ class Command(BaseCommand):
             {
                 "email": "carlos@devmatch.local",
                 "username": "carlos",
+                "creado_hace": 95,
                 "first_name": "Carlos",
                 "last_name": "Mendoza",
                 "es_admin": False,
@@ -130,6 +181,7 @@ class Command(BaseCommand):
             {
                 "email": "ana@devmatch.local",
                 "username": "ana",
+                "creado_hace": 100,
                 "first_name": "Ana",
                 "last_name": "Ríos",
                 "es_admin": False,
@@ -168,9 +220,10 @@ class Command(BaseCommand):
                 usuario.first_name = datos["first_name"]
                 usuario.last_name = datos["last_name"]
                 usuario.es_admin = datos["es_admin"]
+                usuario.es_activo = True
                 usuario.set_password(DEMO_PASSWORD)
                 usuario.save(
-                    update_fields=["username", "first_name", "last_name", "es_admin", "password"]
+                    update_fields=["username", "first_name", "last_name", "es_admin", "es_activo", "password"]
                 )
 
             perfil_data = datos["perfil"]
@@ -194,6 +247,9 @@ class Command(BaseCommand):
             for nombre in datos["intereses"]:
                 interes = self._catalogo(Interes, nombre)
                 UsuarioInteres.objects.get_or_create(usuario=usuario, interes=interes)
+            self._fijar(
+                Usuario, usuario.pk, creado_en=self._hace_dias(datos["creado_hace"])
+            )
 
         self.stdout.write(self.style.SUCCESS(f"  usuarios y perfiles: {len(usuarios)}"))
 
@@ -215,6 +271,7 @@ class Command(BaseCommand):
             {
                 "creador": "maria@devmatch.local",
                 "nombre": "BrainTwist — Quizzes educativos",
+                "creado_hace": 10,
                 "descripcion": "Plataforma de quizzes con dificultad adaptativa para aulas.",
                 "estado": Proyecto.ESTADO_PUBLICADO,
                 "media": [{"tipo": ProyectoMedia.TIPO_LOGO, "archivo_url": "/media/seed/braintwist.png", "orden": 0}],
@@ -238,8 +295,27 @@ class Command(BaseCommand):
                 ],
             },
             {
+                "creador": "juan@devmatch.local",
+                "nombre": "DevNotes — Notas técnicas",
+                "creado_hace": 14,
+                "descripcion": "Bitácora colaborativa de notas y apuntes de clases.",
+                "estado": Proyecto.ESTADO_BORRADOR,
+                "media": [],
+                "vacantes": [
+                    {
+                        "titulo": "Frontend Developer",
+                        "descripcion": "Maquetar el editor de notas y la vista de organización.",
+                        "estado": Vacante.ESTADO_ABIERTA,
+                        "cupos_totales": 1,
+                        "habilidades": ["Frontend Development"],
+                        "tecnologias": ["React"],
+                    },
+                ],
+            },
+            {
                 "creador": "maria@devmatch.local",
                 "nombre": "ClinVis — Dashboards clínicos",
+                "creado_hace": 40,
                 "descripcion": "Visualización de indicadores para centros de salud.",
                 "estado": Proyecto.ESTADO_RECLUTANDO,
                 "media": [{"tipo": ProyectoMedia.TIPO_LOGO, "archivo_url": "/media/seed/clinvis.png", "orden": 0}],
@@ -265,6 +341,7 @@ class Command(BaseCommand):
             {
                 "creador": "juan@devmatch.local",
                 "nombre": "DevRoom — Comunidad dev",
+                "creado_hace": 55,
                 "descripcion": "Red social ligera para estudiantes y desarrolladores junior.",
                 "estado": Proyecto.ESTADO_EQUIPO_COMPLETO,
                 "media": [],
@@ -273,6 +350,7 @@ class Command(BaseCommand):
             {
                 "creador": "maria@devmatch.local",
                 "nombre": "FitTrack — App de hábitos",
+                "creado_hace": 68,
                 "descripcion": "Seguimiento de hábitos y rutinas de ejercicio con gráficos.",
                 "estado": Proyecto.ESTADO_EN_DESARROLLO,
                 "media": [],
@@ -281,6 +359,8 @@ class Command(BaseCommand):
             {
                 "creador": "juan@devmatch.local",
                 "nombre": "ViajeSeguro — Alertas de viaje",
+                "creado_hace": 90,
+                "cierre_hace": 30,
                 "descripcion": "Sistema de alertas de seguridad para viajeros.",
                 "estado": Proyecto.ESTADO_FINALIZADO,
                 "media": [],
@@ -289,6 +369,7 @@ class Command(BaseCommand):
             {
                 "creador": "juan@devmatch.local",
                 "nombre": "PetMatch — Adopción responsable",
+                "creado_hace": 18,
                 "descripcion": "Conectar refugios con familias adoptantes y dar seguimiento a las adopciones.",
                 "estado": Proyecto.ESTADO_RECLUTANDO,
                 "media": [],
@@ -306,6 +387,7 @@ class Command(BaseCommand):
             {
                 "creador": "maria@devmatch.local",
                 "nombre": "ResuMate — Optimizador de CV",
+                "creado_hace": 3,
                 "descripcion": "Sugerencias automáticas para armar un CV orientado a reclutadores tech.",
                 "estado": Proyecto.ESTADO_PUBLICADO,
                 "media": [],
@@ -323,6 +405,7 @@ class Command(BaseCommand):
             {
                 "creador": "juan@devmatch.local",
                 "nombre": "GymLog — Entrenamientos colaborativos",
+                "creado_hace": 27,
                 "descripcion": "Rutinas compartidas y seguimiento de progreso entre estudiantes.",
                 "estado": Proyecto.ESTADO_RECLUTANDO,
                 "media": [],
@@ -340,6 +423,8 @@ class Command(BaseCommand):
             {
                 "creador": "maria@devmatch.local",
                 "nombre": "MarketAI — IA de precios",
+                "creado_hace": 80,
+                "cierre_hace": 50,
                 "descripcion": "Motor piloto de estimación de precios que no llegó a validarse.",
                 "estado": Proyecto.ESTADO_CANCELADO,
                 "media": [],
@@ -368,9 +453,46 @@ class Command(BaseCommand):
             )
             if not creado:
                 proyecto.descripcion = datos["descripcion"]
-                proyecto.estado = datos["estado"]
-                proyecto.es_activo = True
-                proyecto.save()
+                proyecto.save(update_fields=["descripcion"])
+                if proyecto.estado in ESTADOS_CERRADOS:
+                    # Terminal: no existe transición de salida, así que no se
+                    # revierte al fixture ni se reactiva; solo se normalizan
+                    # sus vacantes a coherentes con el gate de proyectos
+                    # cerrados (Ronda 4).
+                    cerrar_vacantes_abiertas(proyecto)
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f"  aviso: '{proyecto.nombre}' está en estado terminal "
+                            f"'{proyecto.estado}'; no se revierte a "
+                            f"'{datos['estado']}' y sus vacantes quedan cerradas."
+                        )
+                    )
+                else:
+                    if proyecto.estado != datos["estado"]:
+                        try:
+                            cambiar_estado(proyecto, datos["estado"])
+                        except TransicionEstadoInvalida:
+                            self.stdout.write(
+                                self.style.WARNING(
+                                    f"  aviso: no se pudo llevar '{proyecto.nombre}' de "
+                                    f"'{proyecto.estado}' a '{datos['estado']}' "
+                                    f"(transición inválida); se conserva el estado actual."
+                                )
+                            )
+                    if not proyecto.es_activo:
+                        proyecto.es_activo = True
+                        proyecto.save(update_fields=["es_activo"])
+
+            fechas = {"creado_en": self._hace_dias(datos["creado_hace"])}
+            # finalizado_en/cancelado_en: el trigger solo los rellena al CAMBIAR
+            # de estado; el seed inserta ya en estado terminal, así que se fijan
+            # aquí, coherentes con el estado real del proyecto.
+            if "cierre_hace" in datos:
+                if proyecto.estado == Proyecto.ESTADO_FINALIZADO:
+                    fechas["finalizado_en"] = self._hace_dias(datos["cierre_hace"])
+                elif proyecto.estado == Proyecto.ESTADO_CANCELADO:
+                    fechas["cancelado_en"] = self._hace_dias(datos["cierre_hace"])
+            self._fijar(Proyecto, proyecto.pk, **fechas)
 
             for media in datos["media"]:
                 ProyectoMedia.objects.get_or_create(
@@ -379,20 +501,54 @@ class Command(BaseCommand):
                     defaults={"archivo_url": media["archivo_url"], "orden": media["orden"]},
                 )
 
-            for vacante in datos["vacantes"]:
+            for orden, vacante in enumerate(datos["vacantes"]):
+                if (
+                    vacante["estado"] == Vacante.ESTADO_ABIERTA
+                    and proyecto.estado in ESTADOS_CERRADOS
+                ):
+                    # Alta bloqueada en proyectos cerrados (Ronda 4): una
+                    # vacante abierta aquí sería un estado que la interfaz ya
+                    # no permite reproducir (cerrar_vacantes_abiertas en la
+                    # rama anterior ya normalizó las existentes).
+                    continue
+                estado_deseado = vacante["estado"]
+                if proyecto.estado in ESTADOS_CERRADOS:
+                    estado_deseado = Vacante.ESTADO_CANCELADA
                 vac, _creada = Vacante.objects.get_or_create(
                     proyecto=proyecto,
                     titulo=vacante["titulo"],
                     defaults={
                         "descripcion": vacante["descripcion"],
                         "cupos_totales": vacante["cupos_totales"],
-                        "estado": vacante["estado"],
+                        "estado": estado_deseado,
                     },
                 )
                 if not _creada:
-                    vac.estado = vacante["estado"]
-                    vac.cupos_totales = vacante["cupos_totales"]
-                    vac.save()
+                    # Nunca reducir cupos_totales por debajo de cupos_ocupados:
+                    # una vacante con membresías legadas (p. ej. testers con el
+                    # trigger deshabilitado) violaría chk_cupos_no_exceden y
+                    # abortaría el seed completo (caso PetMatch en Neon: 4/2).
+                    vac.cupos_totales = max(
+                        vacante["cupos_totales"], vac.cupos_ocupados
+                    )
+                    nuevo_estado = estado_deseado
+                    # fn_actualizar_cupos_vacante marca 'cubierta' al llenarse
+                    # los cupos; una re-corrida no debe destruir ese estado ni
+                    # dejar una vacante llena como 'abierta'.
+                    if (
+                        nuevo_estado == Vacante.ESTADO_ABIERTA
+                        and vac.cupos_ocupados >= vac.cupos_totales
+                    ):
+                        nuevo_estado = Vacante.ESTADO_CUBIERTA
+                    if vac.estado != nuevo_estado:
+                        vac.estado = nuevo_estado
+                    vac.es_activo = True
+                    vac.save(update_fields=["estado", "cupos_totales", "es_activo"])
+                self._fijar(
+                    Vacante,
+                    vac.pk,
+                    creado_en=self._hace_dias(datos["creado_hace"] - 0.1 * (orden + 1)),
+                )
                 for nombre in vacante["habilidades"]:
                     habilidad = self._catalogo(Habilidad, nombre)
                     VacanteHabilidad.objects.get_or_create(vacante=vac, habilidad=habilidad)
@@ -401,3 +557,372 @@ class Command(BaseCommand):
                     VacanteTecnologia.objects.get_or_create(vacante=vac, tecnologia=tecnologia)
 
         self.stdout.write(self.style.SUCCESS(f"  proyectos y vacantes: {len(proyectos)}"))
+
+    # ------------------------------------------------------------------
+    # POSTULACIONES, INVITACIONES Y MEMBRESÍAS (escenarios de Match Score)
+    # ------------------------------------------------------------------
+    # Datos deterministas (no aleatorios) para que Squad B pueda maquetar el
+    # desglose del Match Score (CR-05) y el snapshot congelado (CR-07) sin
+    # esperar al motor real de Squad A. Cada escenario declara el puntaje por
+    # factor; `match_score` se calcula con los pesos vigentes para que el
+    # porcentaje y su desglose nunca queden incoherentes entre sí.
+
+    def _pesos_activos(self):
+        """Devuelve el perfil de pesos vigente (singleton) o lo crea."""
+        Configuracion = self._model("matching", "ConfiguracionPesosMatching")
+        pesos = Configuracion.objects.filter(es_activo=True).first()
+        if pesos is None:
+            pesos = Configuracion.objects.create(
+                nombre="Ponderación estándar v1.0",
+                peso_habilidades=Decimal("0.35"),
+                peso_nivel=Decimal("0.15"),
+                peso_tecnologias=Decimal("0.30"),
+                peso_experiencia=Decimal("0.10"),
+                peso_disponibilidad=Decimal("0.10"),
+                es_activo=True,
+            )
+        return pesos
+
+    @staticmethod
+    def _score_y_factores(pesos, factores):
+        """
+        Construye el `match_factores` (JSONB) en la forma documentada en
+        DEVMATCH-BD 9 y calcula el `match_score` ponderado con esos mismos
+        pesos (suma exacta, sin recálculos posteriores).
+        """
+        desglose = {}
+        score = Decimal("0")
+        for nombre in (
+            "habilidades",
+            "nivel",
+            "tecnologias",
+            "experiencia",
+            "disponibilidad",
+        ):
+            peso = getattr(pesos, f"peso_{nombre}")
+            puntaje = int(factores.get(nombre, 0))
+            desglose[nombre] = {"score": puntaje, "peso": float(peso)}
+            score += Decimal(puntaje) * peso
+        return score.quantize(Decimal("0.01")), desglose
+
+    @staticmethod
+    def _buscar_vacante(Proyecto, Vacante, nombre_proyecto, titulo_vacante):
+        proyecto = Proyecto.objects.filter(nombre=nombre_proyecto).first()
+        if proyecto is None:
+            return None, None
+        vacante = Vacante.objects.filter(
+            proyecto=proyecto, titulo=titulo_vacante
+        ).first()
+        return proyecto, vacante
+
+    @staticmethod
+    def _upsert_postulacion(Postulacion, vacante, usuario, defaults):
+        """
+        Garantiza que la postulación de este escenario tenga EXACTAMENTE los
+        valores declarados (score/factores/estado), aunque ya exista una fila de
+        una siembra anterior en la BD compartida. Prefiere reutilizar la fila
+        activa (pendiente/preseleccionada) para no dejar dos activas por par.
+        """
+        qs = Postulacion.objects.filter(vacante=vacante, postulante=usuario)
+        activas = (Postulacion.ESTADO_PENDIENTE, Postulacion.ESTADO_PRESELECCIONADA)
+        post = (
+            qs.filter(estado__in=activas).order_by("-id").first()
+            or qs.order_by("-id").first()
+        )
+        if post is None:
+            return Postulacion.objects.create(
+                vacante=vacante, postulante=usuario, **defaults
+            )
+        for campo, valor in defaults.items():
+            setattr(post, campo, valor)
+        post.save(update_fields=list(defaults.keys()))
+        return post
+
+    def _normalizar_seed_legado(self, Postulacion, pesos):
+        """
+        Las siembras anteriores dejaban postulaciones con
+        `match_factores={"notas": "seed"}` (sin desglose por factor), lo que
+        deja en blanco la barra y el desglose del Match Score en la UI. Se les
+        reemplaza por un desglose válido que reproduce su `match_score`. Solo
+        toca filas marcadas como seed (nunca datos reales) y es idempotente:
+        tras normalizar, la marca desaparece.
+        """
+        nombres = (
+            "habilidades",
+            "nivel",
+            "tecnologias",
+            "experiencia",
+            "disponibilidad",
+        )
+        actualizadas = 0
+        for post in Postulacion.objects.filter(match_factores={"notas": "seed"}):
+            base = post.match_score
+            if base != base.to_integral_value():
+                continue
+            _, factores = self._score_y_factores(
+                pesos, {nombre: int(base) for nombre in nombres}
+            )
+            post.match_factores = factores
+            if post.pesos_usados_id is None:
+                post.pesos_usados = pesos
+                post.save(update_fields=["match_factores", "pesos_usados"])
+            else:
+                post.save(update_fields=["match_factores"])
+            actualizadas += 1
+        return actualizadas
+
+    def seed_interacciones(self):
+        Usuario = self._model("accounts", "Usuario")
+        Proyecto = self._model("projects", "Proyecto")
+        Vacante = self._model("projects", "Vacante")
+        Postulacion = self._model("applications", "Postulacion")
+        Invitacion = self._model("teams", "Invitacion")
+        EquipoMembresia = self._model("teams", "EquipoMembresia")
+
+        pesos = self._pesos_activos()
+
+        # Escenarios de postulación: ALTO (calza con los requisitos), MEDIO
+        # (calce parcial) y BAJO (poca compatibilidad). Cubren el rango que la
+        # vista de Match Score debe saber pintar (barra + desglose por factor).
+        escenarios = [
+            {
+                "postulante": "juan@devmatch.local",
+                "proyecto": "BrainTwist — Quizzes educativos",
+                "vacante": "Frontend Developer",
+                "estado": Postulacion.ESTADO_PENDIENTE,
+                "factores": {"habilidades": 95, "nivel": 80, "tecnologias": 100, "experiencia": 70, "disponibilidad": 100},
+                "postulado_hace": 8,
+            },
+            {
+                "postulante": "ana@devmatch.local",
+                "proyecto": "ClinVis — Dashboards clínicos",
+                "vacante": "Data Scientist",
+                "estado": Postulacion.ESTADO_PENDIENTE,
+                "factores": {"habilidades": 90, "nivel": 80, "tecnologias": 100, "experiencia": 70, "disponibilidad": 80},
+                "postulado_hace": 30,
+            },
+            {
+                "postulante": "carlos@devmatch.local",
+                "proyecto": "BrainTwist — Quizzes educativos",
+                "vacante": "Frontend Developer",
+                "estado": Postulacion.ESTADO_PRESELECCIONADA,
+                "factores": {"habilidades": 70, "nivel": 40, "tecnologias": 80, "experiencia": 30, "disponibilidad": 70},
+                "postulado_hace": 6,
+            },
+            {
+                "postulante": "ana@devmatch.local",
+                "proyecto": "ClinVis — Dashboards clínicos",
+                "vacante": "Backend Developer",
+                "estado": Postulacion.ESTADO_PENDIENTE,
+                "factores": {"habilidades": 55, "nivel": 80, "tecnologias": 85, "experiencia": 60, "disponibilidad": 80},
+                "postulado_hace": 35,
+            },
+            {
+                "postulante": "carlos@devmatch.local",
+                "proyecto": "ClinVis — Dashboards clínicos",
+                "vacante": "Backend Developer",
+                "estado": Postulacion.ESTADO_RECHAZADA,
+                "factores": {"habilidades": 25, "nivel": 40, "tecnologias": 30, "experiencia": 20, "disponibilidad": 70},
+                "postulado_hace": 33,
+                "decidido_hace": 28,
+                "motivo": "Perfil sin experiencia en backend.",
+            },
+            {
+                "postulante": "admin@devmatch.local",
+                "proyecto": "ResuMate — Optimizador de CV",
+                "vacante": "Backend Developer",
+                "estado": Postulacion.ESTADO_PENDIENTE,
+                "factores": {"habilidades": 25, "nivel": 100, "tecnologias": 40, "experiencia": 100, "disponibilidad": 100},
+                "postulado_hace": 2,
+            },
+            {
+                "postulante": "carlos@devmatch.local",
+                "proyecto": "ResuMate — Optimizador de CV",
+                "vacante": "Backend Developer",
+                "estado": Postulacion.ESTADO_PENDIENTE,
+                "factores": {"habilidades": 10, "nivel": 40, "tecnologias": 20, "experiencia": 15, "disponibilidad": 60},
+                "postulado_hace": 1,
+            },
+        ]
+
+        creadas = 0
+        for esc in escenarios:
+            usuario = Usuario.objects.filter(email=esc["postulante"]).first()
+            proyecto, vacante = self._buscar_vacante(
+                Proyecto, Vacante, esc["proyecto"], esc["vacante"]
+            )
+            if usuario is None or vacante is None:
+                continue
+            if proyecto.creador_id == usuario.id:
+                continue
+            if proyecto.estado in ESTADOS_CERRADOS:
+                # No (re)crear interacciones activas en proyectos cerrados.
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"  aviso: se omite la postulación de {esc['postulante']} a "
+                        f"'{esc['vacante']}' ({esc['proyecto']}): el proyecto está "
+                        f"'{proyecto.estado}'."
+                    )
+                )
+                continue
+            score, factores = self._score_y_factores(pesos, esc["factores"])
+            defaults = {
+                "estado": esc["estado"],
+                "match_score": score,
+                "match_factores": factores,
+                "pesos_usados": pesos,
+                "decidido_por": None,
+                "decidido_en": None,
+                "motivo_decision": esc.get("motivo", ""),
+            }
+            if esc["estado"] in (
+                Postulacion.ESTADO_ACEPTADA,
+                Postulacion.ESTADO_RECHAZADA,
+            ):
+                defaults["decidido_por"] = proyecto.creador
+                defaults["decidido_en"] = self._hace_dias(esc["decidido_hace"])
+            post = self._upsert_postulacion(Postulacion, vacante, usuario, defaults)
+            self._fijar(
+                Postulacion, post.pk, postulado_en=self._hace_dias(esc["postulado_hace"])
+            )
+            creadas += 1
+
+        # Membresías por postulación aceptada. La aceptación y el INSERT de la
+        # membresía van en una sola transacción (DEVMATCH-BD 8.3). El trigger
+        # trg_membresia_actualiza_cupos recalcula cupos_ocupados: NUNCA lo
+        # escribimos a mano. `carlos` queda con 2 membresías activas y pocas
+        # horas de disponibilidad -> escenario de choque de disponibilidad;
+        # ResuMate queda con 1/2 cupos (casi llena) -> límite de cupos.
+        # Cada tupla: (email, proyecto, vacante, postulado_hace, decidido_hace),
+        # con los desfases en días.
+        aceptadas = [
+            ("ana@devmatch.local", "ResuMate — Optimizador de CV", "Backend Developer", 2.5, 2.2),
+            ("carlos@devmatch.local", "BrainTwist — Quizzes educativos", "QA / Testing", 9, 7),
+            ("carlos@devmatch.local", "GymLog — Entrenamientos colaborativos", "Frontend Developer", 25, 22),
+        ]
+        membresias = 0
+        for email, nombre_proyecto, titulo_vacante, postulado_hace, decidido_hace in aceptadas:
+            usuario = Usuario.objects.filter(email=email).first()
+            proyecto, vacante = self._buscar_vacante(
+                Proyecto, Vacante, nombre_proyecto, titulo_vacante
+            )
+            if usuario is None or vacante is None or proyecto.creador_id == usuario.id:
+                continue
+            if proyecto.estado in ESTADOS_CERRADOS:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"  aviso: se omite la aceptación de {email} en "
+                        f"'{titulo_vacante}' ({nombre_proyecto}): el proyecto está "
+                        f"'{proyecto.estado}'."
+                    )
+                )
+                continue
+            score, factores = self._score_y_factores(
+                pesos,
+                {"habilidades": 80, "nivel": 70, "tecnologias": 80, "experiencia": 60, "disponibilidad": 80},
+            )
+            fecha_decision = self._hace_dias(decidido_hace)
+            try:
+                with transaction.atomic():
+                    postulacion = self._upsert_postulacion(
+                        Postulacion,
+                        vacante,
+                        usuario,
+                        {
+                            "estado": Postulacion.ESTADO_ACEPTADA,
+                            "match_score": score,
+                            "match_factores": factores,
+                            "pesos_usados": pesos,
+                            "decidido_por": proyecto.creador,
+                            "decidido_en": fecha_decision,
+                            "motivo_decision": "",
+                        },
+                    )
+                    membresia, _ = EquipoMembresia.objects.get_or_create(
+                        vacante=vacante,
+                        usuario=usuario,
+                        defaults={
+                            "proyecto": proyecto,
+                            "postulacion": postulacion,
+                            "invitacion": None,
+                            "estado": EquipoMembresia.ESTADO_ACTIVO,
+                        },
+                    )
+                    self._fijar(
+                        Postulacion,
+                        postulacion.pk,
+                        postulado_en=self._hace_dias(postulado_hace),
+                    )
+                    # Ingresa al equipo en el momento en que se acepta.
+                    self._fijar(EquipoMembresia, membresia.pk, ingreso_en=fecha_decision)
+                    membresias += 1
+            except Exception:
+                continue
+
+        # Membresía por invitación aceptada (origen XOR: invitación, no
+        # postulación) para que Squad B pueda probar ambos caminos de ingreso.
+        # Cada tupla: (email, proyecto, vacante, creada_hace, respondida_hace).
+        invitaciones = [
+            ("admin@devmatch.local", "PetMatch — Adopción responsable", "Fullstack Developer", 15, 13),
+        ]
+        for email, nombre_proyecto, titulo_vacante, creada_hace, respondida_hace in invitaciones:
+            usuario = Usuario.objects.filter(email=email).first()
+            proyecto, vacante = self._buscar_vacante(
+                Proyecto, Vacante, nombre_proyecto, titulo_vacante
+            )
+            if usuario is None or vacante is None or proyecto.creador_id == usuario.id:
+                continue
+            if proyecto.estado in ESTADOS_CERRADOS:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"  aviso: se omite la invitación de {email} a "
+                        f"'{titulo_vacante}' ({nombre_proyecto}): el proyecto está "
+                        f"'{proyecto.estado}'."
+                    )
+                )
+                continue
+            fecha_respuesta = self._hace_dias(respondida_hace)
+            try:
+                with transaction.atomic():
+                    invitacion, _ = Invitacion.objects.get_or_create(
+                        vacante=vacante,
+                        usuario_invitado=usuario,
+                        defaults={
+                            "invitado_por": proyecto.creador,
+                            "estado": Invitacion.ESTADO_ACEPTADA,
+                            "respondido_en": fecha_respuesta,
+                        },
+                    )
+                    if invitacion.estado != Invitacion.ESTADO_ACEPTADA:
+                        invitacion.estado = Invitacion.ESTADO_ACEPTADA
+                        invitacion.respondido_en = fecha_respuesta
+                        invitacion.save(update_fields=["estado", "respondido_en"])
+                    self._fijar(
+                        Invitacion,
+                        invitacion.pk,
+                        creado_en=self._hace_dias(creada_hace),
+                        respondido_en=fecha_respuesta,
+                    )
+                    membresia, _ = EquipoMembresia.objects.get_or_create(
+                        vacante=vacante,
+                        usuario=usuario,
+                        defaults={
+                            "proyecto": proyecto,
+                            "postulacion": None,
+                            "invitacion": invitacion,
+                            "estado": EquipoMembresia.ESTADO_ACTIVO,
+                        },
+                    )
+                    self._fijar(EquipoMembresia, membresia.pk, ingreso_en=fecha_respuesta)
+                    membresias += 1
+            except Exception:
+                continue
+
+        normalizadas = self._normalizar_seed_legado(Postulacion, pesos)
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"  interacciones: {creadas} postulaciones, {membresias} membresías "
+                f"(1 vía invitación), {normalizadas} filas seed antiguas normalizadas"
+            )
+        )

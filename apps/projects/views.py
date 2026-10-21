@@ -2,18 +2,45 @@ import json
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.http import JsonResponse, Http404
-from django.db.models import Q
+from django.http import JsonResponse, Http404, HttpResponseRedirect
+from django.db.models import Q, Prefetch
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
-from django.views.generic import CreateView, DetailView, UpdateView
+from django.views.generic import CreateView, DetailView, UpdateView, ListView
+from apps.matching.engine import calcular_match_score
+from apps.matching.models import ConfiguracionPesosMatching
+from apps.applications.services import (
+    construir_perfil_matching,
+    construir_vacante_matching,
+)
+from apps.applications.models import Postulacion
 
 from .forms import ProyectoForm, ProyectoMediaForm, VacanteForm
 from .models import Proyecto, ProyectoMedia, Vacante
-from .services import TRANSICIONES_VALIDAS
+from .services import (
+    ESTADO_BADGE,
+    ESTADOS_CERRADOS,
+    TRANSICIONES_VALIDAS,
+    VacanteInvalida,
+    cambiar_estado,
+    puede_agregar_imagenes,
+    puede_agregar_vacantes,
+)
+
+# Estados que cuentan como "postulación activa" para bloquear una nueva
+# (espejo del índice ux_postulacion_activa_unica en el esquema).
+ESTADOS_POSTULACION_ACTIVA = (
+    Postulacion.ESTADO_PENDIENTE,
+    Postulacion.ESTADO_PRESELECCIONADA,
+)
+
+# Estados desde los que el dueño del proyecto puede rechazar a un candidato.
+ESTADOS_RECHAZABLES = ESTADOS_POSTULACION_ACTIVA
 
 
 TABS = ("vacantes", "descripcion", "galeria")
@@ -29,15 +56,7 @@ ESTADOS_OCULTOS = (Proyecto.ESTADO_BORRADOR, Proyecto.ESTADO_CANCELADO)
 # estados usa un color DIFERENTE (spec: "cada uno con un color diferente").
 # `cancelado` NO se ofrece como opción editable: se le asigna automáticamente
 # al dueño cuando intenta borrar el proyecto (lo aplica `ProyectoDeleteView`).
-ESTADO_BADGE = {
-    Proyecto.ESTADO_BORRADOR: "bg-slate-100 text-slate-600",
-    Proyecto.ESTADO_PUBLICADO: "bg-violet-100 text-violet-700",
-    Proyecto.ESTADO_RECLUTANDO: "bg-green-100 text-green-700",
-    Proyecto.ESTADO_EQUIPO_COMPLETO: "bg-cyan-100 text-cyan-700",
-    Proyecto.ESTADO_EN_DESARROLLO: "bg-amber-100 text-amber-700",
-    Proyecto.ESTADO_FINALIZADO: "bg-emerald-100 text-emerald-700",
-    Proyecto.ESTADO_CANCELADO: "bg-rose-100 text-rose-600",
-}
+# El mapeo vive en `services.ESTADO_BADGE` para que `applications` lo reuse.
 
 
 def badge_estado(proyecto):
@@ -46,6 +65,24 @@ def badge_estado(proyecto):
 
 def _plural(n, singular, plural):
     return singular if n == 1 else plural
+
+
+def url_volver(request, defecto):
+    """Destino del botón "Volver".
+
+    Prioriza un `?next=` interno (evita open redirect con
+    `url_has_allowed_host_and_scheme`) y, si no hay o es externo, usa
+    `defecto`. Reemplaza al viejo `history.back()`, que reabría pasos
+    intermedios del historial (p. ej. el modal de creación).
+    """
+    candidato = request.GET.get("next", "")
+    if candidato and url_has_allowed_host_and_scheme(
+        candidato,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return candidato
+    return defecto
 
 
 def hace_relativo(instante):
@@ -87,6 +124,34 @@ def datos_laterales(proyecto, usuario):
     habilidades, tecnologias = [], []
     cupos_ocupados_total = cupos_totales_total = 0
 
+    # Preparamos el perfil y los pesos una sola vez si el usuario puede ver el Match Score
+    perfil_matching = None
+    pesos = None
+    if usuario.is_authenticated and not es_dueno:
+        pesos_activos = ConfiguracionPesosMatching.objects.filter(es_activo=True).first()
+        if pesos_activos:
+            pesos = {
+                "habilidades": float(pesos_activos.peso_habilidades),
+                "nivel": float(pesos_activos.peso_nivel),
+                "tecnologias": float(pesos_activos.peso_tecnologias),
+                "experiencia": float(pesos_activos.peso_experiencia),
+                "disponibilidad": float(pesos_activos.peso_disponibilidad),
+            }
+            perfil_matching = construir_perfil_matching(usuario)
+
+    # Vacantes a las que el usuario ya tiene una postulación activa: no puede
+    # volver a postularse (espejo de ux_postulacion_activa_unica; tras un
+    # rechazo o retiro vuelve a habilitarse el botón).
+    vacantes_ya_postuladas = set()
+    if usuario.is_authenticated:
+        vacantes_ya_postuladas = set(
+            Postulacion.objects.filter(
+                postulante=usuario,
+                vacante__in=vacantes,
+                estado__in=ESTADOS_POSTULACION_ACTIVA,
+            ).values_list("vacante_id", flat=True)
+        )
+
     for vacante in vacantes:
         vacante.habilidades = [
             r.habilidad
@@ -108,12 +173,40 @@ def datos_laterales(proyecto, usuario):
             if vacante.cupos_totales
             else 0
         )
-        # El botón "Postularme" se habilita solo si hay cupo, no es el dueño
-        # y no está ya postulado (lo de "ya postulado" llega con el modelo de
-        # postulaciones, Etapa 2). La vista Dueño lo mantiene deshabilitado.
+        # El botón "Postularme" se habilita solo si hay cupo, no es el dueño,
+        # el proyecto sigue abierto (finalizado/cancelado ya no reclutan), la
+        # vacante está abierta y el usuario no tiene ya una postulación activa.
+        # El mensaje del botón deshabilitado explica por qué.
+        proyecto_abierto = proyecto.estado not in ESTADOS_CERRADOS
         vacante.puede_postularse = (
-            usuario.is_authenticated and not es_dueno and vacante.cupos_libres > 0
+            usuario.is_authenticated
+            and not es_dueno
+            and proyecto_abierto
+            and vacante.cupos_libres > 0
+            and vacante.estado == Vacante.ESTADO_ABIERTA
+            and vacante.id not in vacantes_ya_postuladas
         )
+        if not proyecto_abierto:
+            vacante.motivo_no_postularse = (
+                "El proyecto ya no está abierto a postulaciones"
+            )
+        elif es_dueno:
+            vacante.motivo_no_postularse = "Eres el creador de este proyecto"
+        elif not usuario.is_authenticated:
+            vacante.motivo_no_postularse = "Inicia sesión para postularte"
+        elif vacante.id in vacantes_ya_postuladas:
+            vacante.motivo_no_postularse = "Ya tienes una postulación activa"
+        else:
+            vacante.motivo_no_postularse = "Publicación completa"
+
+        # Calculamos y anexamos el Match Score dinámicamente a la vacante
+        vacante.score_total = None
+        vacante.factores = None
+        if perfil_matching and pesos:
+            vacante_matching = construir_vacante_matching(vacante)
+            score_total, factores = calcular_match_score(perfil_matching, vacante_matching, pesos)
+            vacante.score_total = score_total
+            vacante.factores = factores
 
         for habilidad in vacante.habilidades:
             if habilidad not in habilidades:
@@ -143,8 +236,11 @@ def datos_laterales(proyecto, usuario):
         "cupos_totales_total": cupos_totales_total,
         "logo": logo,
         "prototipos": prototipos,
+        # Un proyecto finalizado/cancelado ya no admite vacantes nuevas: la
+        # tab de vacantes oculta el CTA "Añadir vacante" y VacancyCreateView
+        # rechaza la URL directa (ver services.puede_agregar_vacantes).
+        "puede_agregar_vacantes": puede_agregar_vacantes(proyecto),
     }
-
 
 class ProyectoDetailView(DetailView):
     """Detalle de un proyecto con 3 tabs (?tab=vacantes|descripcion|galeria)."""
@@ -162,12 +258,12 @@ class ProyectoDetailView(DetailView):
         return qs.filter(Q(creador_id=usuario.id) | ~Q(estado__in=ESTADOS_OCULTOS))
 
     def get_object(self, queryset=None):
-            proyecto = super().get_object(queryset)
+        proyecto = super().get_object(queryset)
+        
+        if proyecto.estado == Proyecto.ESTADO_BORRADOR and proyecto.creador_id != self.request.user.id:
+            raise Http404("El proyecto no existe o aún es un borrador privado.")
             
-            if proyecto.estado == Proyecto.ESTADO_BORRADOR and proyecto.creador_id != self.request.user.id:
-                raise Http404("El proyecto no existe o aún es un borrador privado.")
-                
-            return proyecto
+        return proyecto
     
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -183,12 +279,24 @@ class ProyectoDetailView(DetailView):
         ctx["con_descripcion"] = True
         ctx["estado_badge"] = badge_estado(proyecto)
         ctx["publicado_hace"] = hace_relativo(proyecto.creado_en)
+        ctx["volver"] = url_volver(
+            self.request, reverse("core:feed")
+        )
         ctx.update(datos_laterales(proyecto, usuario))
         return ctx
 
 
 class VacancyCreateView(LoginRequiredMixin, CreateView):
-    """Alta de vacante sobre un proyecto. Solo el creador del proyecto."""
+    """Alta de vacante sobre un proyecto. Solo el creador del proyecto.
+
+    Solo se permite mientras el proyecto no esté cerrado (finalizado o
+    cancelado) — ver `services.puede_agregar_vacantes`. El gate de navegación
+    vive en `dispatch` y corta solo GET/HEAD: el POST llega siempre al
+    formulario, que delega en `services.crear_vacante`; si el proyecto está
+    cerrado el servicio lanza `ProyectoNoAceptaVacantes` y `form_valid` la
+    muestra como error no de campo (200). El servicio es la fuente de verdad
+    (regla del PR #10).
+    """
 
     form_class = VacanteForm
     template_name = "projects/vacancy_form.html"
@@ -202,6 +310,21 @@ class VacancyCreateView(LoginRequiredMixin, CreateView):
                 request, "Solo el creador del proyecto puede agregar vacantes."
             )
             return redirect("projects:project_detail", pk=self.proyecto.pk)
+            
+        if request.method in ("GET", "HEAD") and not puede_agregar_vacantes(
+            self.proyecto
+        ):
+            messages.error(
+                request,
+                "No se pueden gestionar vacantes en un proyecto en estado "
+                f"«{self.proyecto.get_estado_display()}».",
+            )
+            return redirect(
+                reverse(
+                    "projects:project_detail", kwargs={"pk": self.proyecto.pk}
+                )
+                + "?tab=vacantes"
+            )
         return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
@@ -215,7 +338,17 @@ class VacancyCreateView(LoginRequiredMixin, CreateView):
     def form_valid(self, form):
         form.instance.proyecto = self.proyecto
         form.instance.es_activo = True
-        return super().form_valid(form)
+        try:
+            return super().form_valid(form)
+        # Sumamos ValidationError a la captura de excepciones
+        except (VacanteInvalida, ValidationError) as exc:
+            # Regla de negocio del servicio (p. ej. proyecto finalizado o
+            # cancelado, cupos, estado de vacante): se muestra como error no
+            # de campo del formulario (200) y no se crea la vacante. El
+            # servicio relee el proyecto con select_for_update dentro de su
+            # transacción, así que no hace falta revalidar aquí.
+            form.add_error(None, str(exc))
+            return self.form_invalid(form)
 
     def get_success_url(self):
         # El modelo Proyecto (Squad A) no define get_absolute_url; armamos la
@@ -254,6 +387,15 @@ class VacancyUpdateView(LoginRequiredMixin, UpdateView):
             return redirect(
                 "projects:project_detail", pk=vacante.proyecto.pk
             )
+            
+        if not puede_agregar_vacantes(vacante.proyecto):
+            messages.error(
+                request, 
+                "No se pueden editar vacantes en un proyecto en estado "
+                f"«{vacante.proyecto.get_estado_display()}»."
+            )
+            return redirect("projects:project_detail", pk=vacante.proyecto.pk)
+            
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
@@ -275,10 +417,15 @@ class VacancyUpdateView(LoginRequiredMixin, UpdateView):
         return ctx
 
     def form_valid(self, form):
+        try:
+            response = super().form_valid(form)
+        except (VacanteInvalida, ValidationError) as exc:
+            form.add_error(None, str(exc))
+            return self.form_invalid(form)
         messages.success(
             self.request, "Vacante actualizada correctamente."
         )
-        return super().form_valid(form)
+        return response
 
     def get_success_url(self):
         return (
@@ -314,6 +461,13 @@ class VacancyDeleteView(LoginRequiredMixin, View):
             )
             return redirect("projects:project_detail", pk=proyecto.pk)
 
+        if not puede_agregar_vacantes(proyecto):
+            messages.error(
+                request, 
+                "No se pueden eliminar vacantes si el proyecto ya finalizó o se canceló."
+            )
+            return redirect("projects:project_detail", pk=proyecto.pk)
+
         vacante.es_activo = False
         vacante.desactivado_en = timezone.now()
         vacante.desactivado_por = request.user
@@ -332,9 +486,9 @@ class ProyectoGaleriaEditView(LoginRequiredMixin, CreateView):
     """Editor de la galería del proyecto (imágenes tipo `prototipo`).
 
     Espejo de `VacancyCreateView`: la página combina el form de alta de una
-    imagen (por URL, sin Pillow todavía) con la lista de imágenes activas y su
-    acción de desactivar. La "subida" es una URL en `archivo_url` (TEXT), igual
-    que `logo_url` — el procesado con Pillow llega como valor agregado.
+    imagen (subida de archivo procesada con Pillow, o URL) con la lista de
+    imágenes activas y su acción de desactivar. El valor final siempre queda
+    en `archivo_url` (ruta relativa /media/... o URL externa).
     """
 
     form_class = ProyectoMediaForm
@@ -351,6 +505,19 @@ class ProyectoGaleriaEditView(LoginRequiredMixin, CreateView):
             return redirect("projects:project_detail", pk=self.proyecto.pk)
         return super().dispatch(request, *args, **kwargs)
 
+    def post(self, request, *args, **kwargs):
+        # Solo se bloquea el ALTA de imágenes (un proyecto cancelado no admite
+        # nuevas capturas). El dueño puede seguir entrando a la página para
+        # eliminar o reordenar las imágenes que ya existían.
+        if not puede_agregar_imagenes(self.proyecto):
+            messages.error(
+                request,
+                "No se pueden añadir imágenes a un proyecto en estado "
+                f"«{self.proyecto.get_estado_display()}».",
+            )
+            return redirect(self.get_success_url())
+        return super().post(request, *args, **kwargs)
+
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs["proyecto"] = self.proyecto
@@ -362,14 +529,31 @@ class ProyectoGaleriaEditView(LoginRequiredMixin, CreateView):
         ctx["es_dueno"] = True
         ctx["estado_badge"] = badge_estado(self.proyecto)
         ctx.update(datos_laterales(self.proyecto, self.request.user))
+        ctx["puede_agregar_imagenes"] = puede_agregar_imagenes(self.proyecto)
         return ctx
 
     def form_valid(self, form):
+        self.proyecto.refresh_from_db(fields=["estado"])
+        if not puede_agregar_imagenes(self.proyecto):
+            messages.error(
+                self.request,
+                "No se pueden añadir imágenes a un proyecto en estado "
+                f"«{self.proyecto.get_estado_display()}».",
+            )
+            return redirect(self.get_success_url())
         form.instance.proyecto = self.proyecto
         form.instance.tipo = ProyectoMedia.TIPO_PROTOTIPO
         form.instance.es_activo = True
+        try:
+            with transaction.atomic():
+                self.object = super().form_valid(form)
+        except ValidationError as exc:
+            # Fallo del storage al guardar la imagen (media_utils): la fila no
+            # se crea y el formulario re-renderiza con el error.
+            form.add_error(None, exc)
+            return self.form_invalid(form)
         messages.success(self.request, "La imagen se subió correctamente.")
-        return super().form_valid(form)
+        return self.object
 
     def get_success_url(self):
         return (
@@ -496,8 +680,14 @@ class ProyectoEditView(LoginRequiredMixin, UpdateView):
         return ctx
 
     def form_valid(self, form):
+        try:
+            with transaction.atomic():
+                response = super().form_valid(form)
+        except ValidationError as exc:
+            form.add_error(None, exc)
+            return self.form_invalid(form)
         messages.success(self.request, "Proyecto actualizado correctamente.")
-        return super().form_valid(form)
+        return response
 
     def get_success_url(self):
         return reverse("projects:project_detail", kwargs={"pk": self.object.pk})
@@ -524,8 +714,12 @@ class ProyectoDeleteView(LoginRequiredMixin, View):
             return redirect("projects:project_detail", pk=proyecto.pk)
 
         if Proyecto.ESTADO_CANCELADO in TRANSICIONES_VALIDAS.get(proyecto.estado, set()):
-            proyecto.estado = Proyecto.ESTADO_CANCELADO
-            proyecto.cancelado_en = timezone.now()
+            # Usar el servicio en lugar de asignar el estado a mano: además de
+            # validar la transición y registrar cancelado_en, cierra las
+            # vacantes que queden 'abiertas' (cerrar_vacantes_abiertas) —
+            # revisión: un proyecto cancelado no puede seguir con vacantes
+            # postulables.
+            cambiar_estado(proyecto, Proyecto.ESTADO_CANCELADO)
 
         proyecto.es_activo = False
         proyecto.desactivado_en = timezone.now()
@@ -541,30 +735,362 @@ class ProyectoDeleteView(LoginRequiredMixin, View):
         return redirect("core:home")
 
 class ProyectoCreateView(LoginRequiredMixin, CreateView):
-    """Creación de un nuevo proyecto desde el modal."""
+    """Creación de un nuevo proyecto.
+
+    Responde la página completa al acceso directo y el fragmento del modal
+    (`_project_create_modal.html`) cuando la petición es AJAX
+    (X-Requested-With), para que static/js/project-modal.js lo inyecte sin
+    recargar. Un POST AJAX válido devuelve JSON con la URL de destino; uno
+    inválido, el fragmento con los errores y status 422.
+    """
 
     model = Proyecto
     form_class = ProyectoForm
     template_name = "projects/project_create.html"
+
+    def _es_ajax(self):
+        return self.request.headers.get("x-requested-with") == "XMLHttpRequest"
+
+    def get_template_names(self):
+        if self._es_ajax():
+            return ["projects/_project_create_modal.html"]
+        return [self.template_name]
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         # La X / Cancelar del modal vuelven a la vista previa del shell
         # (?next llega desde parciales/sidebar) o al feed interno por defecto —
         # nunca a la landing. Solo se aceptan URLs internas (open redirect).
+        # `volver_next` se re-emite en el action del form para que el modal
+        # siga cerrándose bien tras un error de validación.
         next_url = self.request.GET.get("next", "")
-        ctx["volver"] = (
-            next_url
-            if next_url.startswith("/") and not next_url.startswith("//")
-            else reverse("core:feed")
+        interno = bool(next_url) and url_has_allowed_host_and_scheme(
+            next_url,
+            allowed_hosts={self.request.get_host()},
+            require_https=self.request.is_secure(),
         )
+        ctx["volver"] = next_url if interno else reverse("core:feed")
+        ctx["volver_next"] = next_url if interno else ""
         return ctx
 
     def form_valid(self, form):
         form.instance.creador = self.request.user
         form.instance.es_activo = True
+        try:
+            with transaction.atomic():
+                self.object = form.save()
+        except ValidationError as exc:
+            # Fallo del storage al subir el logo: rollback (no queda proyecto
+            # a medias) y el error como non-field error, sin duplicar al
+            # reintentar.
+            form.add_error(None, exc)
+            return self.form_invalid(form)
         messages.success(self.request, "¡Proyecto creado exitosamente!")
-        return super().form_valid(form)
+        if self._es_ajax():
+            return JsonResponse({"ok": True, "redirect": self.get_success_url()})
+        return HttpResponseRedirect(self.get_success_url())
+
+    def form_invalid(self, form):
+        response = super().form_invalid(form)
+        if self._es_ajax():
+            response.status_code = 422
+        return response
 
     def get_success_url(self):
         return reverse("projects:project_detail", kwargs={"pk": self.object.pk})
+
+class MisProyectosListView(LoginRequiredMixin, ListView):
+    model = Proyecto
+    template_name = "projects/project_list.html"
+    context_object_name = "proyectos"
+    paginate_by = 6
+    page_kwarg = "pagina"
+
+    def get_queryset(self):
+        return (
+            Proyecto.objects.filter(
+                creador=self.request.user,
+                es_activo=True,
+            )
+            .prefetch_related(
+                # Los logos se piden filtrados (tipo + es_activo) y se dejan
+                # en `proyecto.logos` para no tener que filtrar en Python.
+                Prefetch(
+                    "media",
+                    queryset=ProyectoMedia.objects.filter(
+                        tipo=ProyectoMedia.TIPO_LOGO,
+                        es_activo=True,
+                    ),
+                    to_attr="logos",
+                ),
+                "vacantes__vacantetecnologiarequerida_set__tecnologia",
+                "vacantes__vacantehabilidadrequerida_set__habilidad",
+                # Postulaciones + postulante: sin esto la vista hace una
+                # consulta por cada postulación de cada vacante (N+1).
+                "vacantes__postulaciones__postulante",
+            )
+            .order_by("-creado_en")
+        )
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        
+        for proyecto in ctx["proyectos"]:
+            proyecto.clases_badge = badge_estado(proyecto)
+            proyecto.hace = hace_relativo(proyecto.creado_en)
+            
+            # Logo: primer adjunto de tipo 'logo'; si no hay, la URL pegada
+            # a mano en el proyecto. La plantilla cae a las iniciales.
+            logos = getattr(proyecto, "logos", [])
+            proyecto.url_logo = (
+                logos[0].archivo_url if logos else (proyecto.logo_url or "")
+            )
+            
+            vacantes_activas = [v for v in proyecto.vacantes.all() if v.es_activo]
+            proyecto.vacantes_list = vacantes_activas
+            
+            proyecto.cupos_ocupados_total = sum(v.cupos_ocupados for v in vacantes_activas)
+            proyecto.cupos_totales_total = sum(v.cupos_totales for v in vacantes_activas)
+            
+            tecnologias_unicas = {}
+            for vacante in vacantes_activas:
+                vacante.tech_list = [
+                    req.tecnologia for req in vacante.vacantetecnologiarequerida_set.all()
+                ]
+                vacante.hab_list = [
+                    req.habilidad for req in vacante.vacantehabilidadrequerida_set.all()
+                ]
+                for req in vacante.vacantetecnologiarequerida_set.all():
+                    tecnologias_unicas[req.tecnologia_id] = req.tecnologia
+
+                postulaciones_list = list(vacante.postulaciones.all())
+                for p in postulaciones_list:
+                    p.score_total = float(p.match_score) if p.match_score is not None else 0
+                    p.factores = p.match_factores
+
+                preseleccionados = [
+                    p for p in postulaciones_list
+                    if p.estado == Postulacion.ESTADO_PRESELECCIONADA
+                ]
+                pendientes = [
+                    p for p in postulaciones_list
+                    if p.estado == Postulacion.ESTADO_PENDIENTE
+                ]
+
+                vacante.postulaciones_list = postulaciones_list
+                vacante.postulaciones_preseleccionadas = preseleccionados
+                vacante.postulaciones_pendientes = pendientes
+                
+                vacante.total_postulaciones = len(pendientes)
+                vacante.total_preseleccionados = len(preseleccionados)
+            
+            proyecto.lista_tecnologias = list(tecnologias_unicas.values())
+
+            nombre_limpio = proyecto.nombre.replace("—", " ").replace("-", " ").strip()
+            palabras = [p for p in nombre_limpio.split() if p]
+            if len(palabras) >= 2:
+                proyecto.iniciales = (palabras[0][0] + palabras[1][0]).upper()
+            elif len(palabras) == 1:
+                proyecto.iniciales = palabras[0][:2].upper()
+            else:
+                proyecto.iniciales = "PR"
+
+        if ctx.get("is_paginated"):
+            paginator = ctx["paginator"]
+            page_obj = ctx["page_obj"]
+            rango_elidido = paginator.get_elided_page_range(page_obj.number, on_each_side=1, on_ends=1)
+            ctx["page_numbers"] = [str(x) if x != paginator.ELLIPSIS else "…" for x in rango_elidido]
+            query_dict = self.request.GET.copy()
+            if "pagina" in query_dict:
+                del query_dict["pagina"]
+            ctx["query_sin_pagina"] = query_dict.urlencode()
+            
+        return ctx
+
+
+def _nombre_candidato(usuario):
+    """Nombre legible del postulante: nombre completo o, si no hay, username."""
+    return usuario.get_full_name() or usuario.username
+
+
+class PreseleccionarPostulacionView(LoginRequiredMixin, View):
+    """Marca una postulación como preseleccionada.
+
+    Solo el dueño del proyecto puede hacerlo y solo desde el estado
+    'pendiente': una postulación ya decidida no se reabre. La plantilla
+    llama a esta vista por fetch, así que responde JSON; si llega sin la
+    cabecera XHR redirige con mensajes.
+    """
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        postulacion = get_object_or_404(
+            Postulacion.objects.select_related("vacante__proyecto", "postulante"),
+            pk=pk,
+        )
+        proyecto = postulacion.vacante.proyecto
+
+        if request.user.id != proyecto.creador_id:
+            return self._responder(
+                request, "No tienes permisos para realizar esta acción."
+            )
+
+        try:
+            with transaction.atomic():
+                postulacion = Postulacion.objects.select_for_update().get(pk=postulacion.pk)
+
+                if postulacion.estado != Postulacion.ESTADO_PENDIENTE:
+                    return self._responder(
+                        request,
+                        "Solo se pueden preseleccionar postulaciones en estado pendiente.",
+                    )
+
+                postulacion.estado = Postulacion.ESTADO_PRESELECCIONADA
+                postulacion.decidido_por = request.user
+                postulacion.decidido_en = timezone.now()
+                postulacion.save(
+                    update_fields=[
+                        "estado",
+                        "decidido_por",
+                        "decidido_en",
+                        "actualizado_en",
+                    ]
+                )
+        except Exception:
+            return self._responder(request, "Error al procesar la preselección.")
+
+        messages.success(
+            request,
+            f"¡Has preseleccionado a {_nombre_candidato(postulacion.postulante)} "
+            "para la vacante!",
+        )
+        return self._responder(request)
+
+    @staticmethod
+    def _responder(request, error=""):
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            if error:
+                return JsonResponse({"error": error}, status=400)
+            return JsonResponse({"ok": True})
+        if error:
+            messages.error(request, error)
+        return redirect("projects:mis_proyectos")
+
+
+class AprobarPostulacionView(LoginRequiredMixin, View):
+    """Aprueba a un candidato preseleccionado y ocupa un cupo en la vacante.
+
+    Delega en `applications.services.aceptar_postulacion`, que:
+    - Bloquea postulación → vacante → perfil con `select_for_update` (orden anti-deadlock)
+    - Valida cupos, carga/disponibilidad y membresía duplicada en el mismo proyecto
+    - Crea la `EquipoMembresia` atómicamente; el trigger `trg_membresia_actualiza_cupos`
+      mantiene `cupos_ocupados` y el estado de la vacante.
+    """
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        postulacion = get_object_or_404(
+            Postulacion.objects.select_related("vacante__proyecto", "postulante"),
+            pk=pk,
+        )
+        proyecto = postulacion.vacante.proyecto
+        destino = (
+            reverse("projects:project_detail", kwargs={"pk": proyecto.pk})
+            + "?tab=vacantes"
+        )
+
+        if request.user.id != proyecto.creador_id:
+            messages.error(request, "No tienes permisos para realizar esta acción.")
+            return redirect("projects:mis_proyectos")
+
+        try:
+            with transaction.atomic():
+                postulacion = Postulacion.objects.select_for_update().get(pk=postulacion.pk)
+                from apps.applications.services import (
+                    aceptar_postulacion,
+                    VacanteSinCupo,
+                    PostulacionNoAceptable,
+                    CargaIncompatible,
+                )
+                membresia = aceptar_postulacion(postulacion, request.user, motivo="")
+        except VacanteSinCupo as exc:
+            messages.error(request, str(exc))
+            return redirect(destino)
+        except PostulacionNoAceptable as exc:
+            messages.error(request, str(exc))
+            return redirect(destino)
+        except CargaIncompatible as exc:
+            messages.error(request, str(exc))
+            return redirect(destino)
+
+        messages.success(
+            request,
+            f"¡Has aprobado a {_nombre_candidato(membresia.usuario)}! "
+            "El cupo ha sido ocupado.",
+        )
+        return redirect(destino)
+
+
+class RechazarPostulacionView(LoginRequiredMixin, View):
+    """Rechaza una postulación pendiente o preseleccionada.
+
+    La plantilla la llama por fetch, así que responde JSON. El rechazo no
+    borra la fila (trigger `trg_bloquear_borrado_postulaciones`) ni libera
+    cupos: solo cambia el estado y deja constancia de quién decidió. Como
+    el estado deja de ser 'pendiente'/'preseleccionada', el índice único
+    `ux_postulacion_activa_unica` vuelve a permitir que el candidato se
+    postule a esa vacante.
+    """
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        postulacion = get_object_or_404(
+            Postulacion.objects.select_related("vacante__proyecto", "postulante"),
+            pk=pk,
+        )
+        proyecto = postulacion.vacante.proyecto
+        vacante = postulacion.vacante
+
+        if request.user.id != proyecto.creador_id:
+            return JsonResponse({"error": "No autorizado"}, status=403)
+
+        try:
+            with transaction.atomic():
+                postulacion = Postulacion.objects.select_for_update().get(pk=postulacion.pk)
+                vacante = Vacante.objects.select_for_update().get(pk=vacante.pk)
+
+                if postulacion.estado not in ESTADOS_RECHAZABLES:
+                    return JsonResponse(
+                        {
+                            "error": "Solo se pueden rechazar postulaciones pendientes "
+                            "o preseleccionadas."
+                        },
+                        status=400,
+                    )
+
+                if not vacante.es_activo or vacante.estado == Vacante.ESTADO_CANCELADA:
+                    return JsonResponse(
+                        {"error": "Esta vacante ya no está disponible."},
+                        status=400,
+                    )
+                if proyecto.estado in ESTADOS_CERRADOS:
+                    return JsonResponse(
+                        {"error": "El proyecto ya no admite cambios en postulaciones."},
+                        status=400,
+                    )
+
+                postulacion.estado = Postulacion.ESTADO_RECHAZADA
+                postulacion.decidido_por = request.user
+                postulacion.decidido_en = timezone.now()
+                postulacion.save(
+                    update_fields=[
+                        "estado",
+                        "decidido_por",
+                        "decidido_en",
+                        "actualizado_en",
+                    ]
+                )
+        except Exception:
+            return JsonResponse({"error": "Error al procesar el rechazo."}, status=500)
+
+        return JsonResponse({"ok": True})
