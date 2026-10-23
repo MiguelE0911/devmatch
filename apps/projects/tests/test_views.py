@@ -525,7 +525,7 @@ class VacancyCreateEstadoTests(TestCase):
             {"tab": "vacantes"},
         )
         self.assertContains(resp, "Añadir vacante")
-        self.assertNotContains(resp, "No se pueden añadir vacantes")
+        self.assertNotContains(resp, "No se pueden gestionar vacantes")
 
     def test_detalle_del_dueno_oculta_cta_en_proyecto_cerrado(self):
         proyecto = self._proyecto_en(Proyecto.ESTADO_FINALIZADO)
@@ -534,7 +534,7 @@ class VacancyCreateEstadoTests(TestCase):
             {"tab": "vacantes"},
         )
         self.assertNotContains(resp, "Añadir vacante")
-        self.assertContains(resp, "No se pueden añadir vacantes")
+        self.assertContains(resp, "No se pueden gestionar vacantes")
 
 
 class GaleriaAgregarImagenEstadoTests(TestCase):
