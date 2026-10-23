@@ -3,8 +3,9 @@
 Uso: DJANGO_SETTINGS_MODULE=config.settings.prod
 
 Las variables de entorno nuevas son OPCIONALES y todas tienen default seguro,
-as que un `.env` con las tres variables de siempre (DJANGO_SECRET_KEY,
-DJANGO_ALLOWED_HOSTS, DATABASE_URL) sigue arrancando sin tocar nada.
+pero las tres de siempre (DJANGO_SECRET_KEY, DJANGO_ALLOWED_HOSTS,
+DATABASE_URL) son obligatorias. DATABASE_URL debe usar el rol de runtime, no
+el rol de migraciones.
 
 Los guards de abajo leen `os.environ` directamente, no los valores ya
 resueltos en base.py. Es deliberado: base.py rellena DJANGO_ALLOWED_HOSTS con
@@ -29,6 +30,20 @@ def _exigida(nombre, motivo):
             f"{nombre} no esta definido y es obligatorio en produccion: {motivo}"
         )
     return valor
+
+
+DATABASE_URL = _exigida(
+    "DATABASE_URL",
+    "sin ella base.py cae silenciosamente a un PostgreSQL local y la app "
+    "arrancaria sin la base real.",
+)
+_usuario_bd = str(DATABASES["default"].get("USER", ""))  # noqa: F405
+if _usuario_bd in {"neondb_owner", "devmatch_user", "cloud_admin"}:
+    raise RuntimeError(
+        f"DATABASE_URL usa el rol privilegiado '{_usuario_bd}'. La aplicacion "
+        "debe usar el rol de runtime (devmatch_app); el rol de migraciones "
+        "solo se usa con config.settings.migrate."
+    )
 
 
 # --- Guards de arranque ------------------------------------------------------

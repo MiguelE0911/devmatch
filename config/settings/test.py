@@ -1,14 +1,27 @@
 """Ajustes para CI y pruebas con PostgreSQL efímero.
 
-No usar este módulo contra Neon: el runner de Django crea y destruye bases
-``test_*``, y aquí se desactiva el almacenamiento externo para que ningún test
-suba archivos al bucket compartido.
+En CI usa el PostgreSQL del job. Contra Neon, definir ``TEST_DATABASE_URL`` con
+el endpoint directo y un rol que pueda crear la base ``test_*``; no usar el rol
+de runtime de la aplicación. Aquí se desactiva el almacenamiento externo para
+que ningún test suba archivos al bucket compartido.
 """
+
+import os
+
+import dj_database_url
 from django.contrib.auth.hashers import PBKDF2PasswordHasher
 
 from .base import *  # noqa: F401,F403
 
 DEBUG = False
+
+_test_database_url = os.environ.get("TEST_DATABASE_URL", "").strip()
+if _test_database_url:
+    DATABASES["default"] = dj_database_url.parse(
+        _test_database_url,
+        conn_max_age=0,
+        conn_health_checks=True,
+    )
 
 
 class FastPBKDF2PasswordHasher(PBKDF2PasswordHasher):

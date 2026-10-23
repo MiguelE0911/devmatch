@@ -57,6 +57,8 @@ En la práctica: las FASES son la guía interna de "qué construir primero", las
 - Dueño de la app "core" (permisos base, mixins, templates compartidos).
 - Dueño de los archivos compartidos de plantilla (`base.html`, `partials/`) — ver detalle en la sección de archivos compartidos más abajo.
 - Crea y gestiona la infraestructura.
+- Custodia `MIGRATION_DATABASE_URL` y es el único que aplica migraciones a Neon.
+- Revisa las migraciones incluidas en cada PR antes de fusionarlo y las aplica después del merge.
 
 ### ETAPA 1 — Infraestructura, Autenticación y Gestión Base
 **(CR-01, CR-03, CR-10) — Correspondiente a las Fases 1-3**
@@ -209,13 +211,15 @@ git add apps/accounts/models.py
 git commit -m "accounts: agrega modelo Usuario con roles"
 ```
 
-1. **Migraciones — regla especial:** solo la persona dueña del `models.py` de esa app corre `makemigrations` para esa app en esa etapa. Si dos personas generan migraciones de la misma app al mismo tiempo, se generan archivos duplicados y eso rompe todo. Ejemplo: solo Persona A1 corre `makemigrations accounts`.
+1. **Migraciones — genera, no apliques.** Solo la persona dueña del `models.py` de esa app corre `makemigrations` para esa app en esa etapa. Si dos personas generan migraciones de la misma app al mismo tiempo, se generan archivos duplicados y eso rompe todo. Ejemplo: solo Persona A1 corre `makemigrations accounts`.
 
 ```
 python manage.py makemigrations accounts
 git add apps/accounts/migrations/
 git commit -m "accounts: migración inicial de Usuario y Perfil"
 ```
+
+No ejecutes `python manage.py migrate`: eso lo hace el Integrador después del merge. La regla completa está en la sección **"Migraciones y roles de base de datos"** más abajo.
 
 1. **Sube tu rama al repositorio remoto** (no a la rama de etapa directamente, a tu propia rama de tarea).
 
@@ -229,13 +233,76 @@ git push origin etapa-1/accounts-modelos
 4. **Si git te muestra un conflicto al hacer push o al abrir el PR:** NO intentes resolverlo solo si no te sientes seguro. Detente, avisa al integrador de inmediato y espera indicaciones. Es preferible perder cinco minutos preguntando que forzar un push (`-force`) y borrar el trabajo de otro.
 5. **Al terminar toda la etapa**, el integrador fusiona `etapa-N-base` → `main`, etiqueta el commit (ej. `v1.0-etapa1`) y abre `etapa-(N+1)-base` desde `main` para reiniciar el ciclo con las nuevas ramas de tarea.
 
-### DEFINICIÓN DE "TERMINADO" — checklist antes de abrir tu PR
+---
+# MIGRACIONES Y ROLES DE BASE DE DATOS — regla del equipo
+
+Hay dos pasos distintos y los hace gente distinta:
+
+| Paso | Quién | Comando | Qué toca |
+|---|---|---|---|
+| **Generar** la migración (`makemigrations`) | Persona dueña del `models.py` de esa app | `python manage.py makemigrations <app>` | Solo archivos en `apps/<app>/migrations/`; **no** cambia Neon |
+| **Aplicar** la migración (`migrate`) | Integrador | `DJANGO_SETTINGS_MODULE=config.settings.migrate python manage.py migrate` | El esquema real de Neon |
+
+**Lo que sí puede hacer la persona dueña del modelo:**
+
+- Editar `models.py`, `admin.py`, `services.py` y sus tests.
+- Generar la migración con su configuración normal (`config.settings.dev`) y su `DATABASE_URL`
+  de runtime (`devmatch_app`), o contra un PostgreSQL local.
+- Verificar que no falten migraciones con:
+
+```powershell
+python manage.py makemigrations --check --dry-run
+```
+
+- Incluir los archivos generados en el PR.
+- Correr los tests de su app con `config.settings.test` y `devmatch_test`.
+- Pedirle al Integrador que aplique o valide la migración en Neon.
+
+**Lo que NO puede hacer:**
+
+- Ejecutar `python manage.py migrate` contra Neon.
+- Usar `MIGRATION_DATABASE_URL` ni pedir o recibir la contraseña de `neondb_owner`.
+- Editar una migración que ya fue aplicada. Si hay un error, se corrige con una **migración
+  nueva**.
+- Desactivar triggers, cambiar permisos/roles o hacer DDL manual en Neon.
+- Subir `.env`, URLs con credenciales, capturas con cadenas de conexión o archivos de traspaso
+  de credenciales al repositorio.
+
+**Flujo completo:**
+
+1. La persona dueña del modelo genera la migración y la commitea en su rama de tarea.
+2. Abre el PR y marca la sección **Migraciones** del template: app, archivos incluidos y si
+   requiere alguna maniobra especial.
+3. El Integrador revisa la migración antes del merge: que sea de la app correcta, que no edite
+   migraciones aplicadas, que no haya operaciones destructivas y que `makemigrations --check`
+   esté limpio.
+4. El Integrador fusiona el PR y **después** aplica las migraciones pendientes con
+   `config.settings.migrate`.
+5. El resto del equipo hace `git pull` de la rama de etapa actualizada. No necesita migrar su
+   copia: todos apuntan a la misma base de Neon.
+6. Si la migración falla, se detiene el merge o se corrige con una migración nueva; no se
+   “arregla” editando una migración ya aplicada.
+
+**Si necesitas probar la migración antes del merge:**
+
+- Usa un PostgreSQL local desechable y aplica ahí tus migraciones, o
+- pídele al Integrador una rama/staging de Neon.
+
+No pidas la contraseña de migraciones para probar en la base compartida. El rol
+`devmatch_app` no puede aplicar DDL, y esa restricción es justamente lo que protege los triggers.
+
+**CI no aplica migraciones a Neon.** El workflow solo levanta un PostgreSQL efímero, corre
+`makemigrations --check --dry-run` y ejecuta los tests. La base compartida la actualiza
+únicamente el Integrador.
+
+## DEFINICIÓN DE "TERMINADO" — checklist antes de abrir tu PR
 
 Antes de subir tu rama y abrir el Pull Request, verifica estos puntos. Esto evita que el Integrador tenga que rebotar PRs a medio hacer y ahorra tiempo a todo el equipo:
 
 ```
 □ El proyecto corre sin errores localmente (python manage.py runserver)
-□ Si tocaste modelos: las migraciones están generadas y committeadas
+□ Si tocaste modelos: la migración está generada, committeada y `makemigrations --check --dry-run` no reporta cambios pendientes
+□ No ejecutaste `migrate` contra Neon ni usaste credenciales de migraciones
 □ No dejaste código comentado o prints de debug
 □ Actualizaste solo los archivos que te correspondían según tu rama de tarea
 □ Corriste los tests de tu app y pasan (ver más abajo cómo)
@@ -243,28 +310,38 @@ Antes de subir tu rama y abrir el Pull Request, verifica estos puntos. Esto evit
 
 ### CÓMO CORRER LOS TESTS (léelo antes de reportar "terminado")
 
-El proyecto usa el runner de Django, no pytest. Y hay un detalle de Neon que hace que el
-comando "normal" falle:
+El proyecto usa el runner de Django, no pytest. Los tests **no** se corren con el rol de
+runtime (`devmatch_app`): el runner crea y destruye una base `test_*`, así que necesita el rol
+`devmatch_test` (con `CREATEDB`) o tu PostgreSQL local/CI.
 
-```bash
+Contra Neon, agrega `TEST_DATABASE_URL` a tu `.env` (te la pasa el Integrador; usa el endpoint
+directo, sin `-pooler`) y corre:
+
+```powershell
+$env:DJANGO_SETTINGS_MODULE="config.settings.test"
 python manage.py test apps --noinput --keepdb
 ```
 
-**`--keepdb` no es opcional.** La base de datos es Neon (PostgreSQL compartido a través de
-PgBouncer). Sin `--keepdb`, Django intenta crear y destruir una base `test_*` en cada corrida
-y el paso de borrado falla con:
+```bash
+DJANGO_SETTINGS_MODULE=config.settings.test python manage.py test apps --noinput --keepdb
+```
+
+**`--keepdb` no es opcional contra Neon.** La base de datos pasa por PgBouncer. Sin `--keepdb`,
+Django intenta crear y destruir una base `test_*` en cada corrida y el paso de borrado falla con:
 
 ```
 database "test_devmatch_db" is being accessed by other users
 ```
 
 No es un problema de tu código: es que PgBouncer mantiene conexiones abiertas sobre la base de
-prueba. Con `--keepdb` Django reutiliza la base entre corridas y no intenta borrarla.
+prueba. Con `--keepdb` Django reutiliza la base entre corridas y no intenta borrarla. La primera
+corrida de `devmatch_test` crea `test_devmatch_db`.
 
 **La corrida completa es lenta contra Neon** (del orden de 30+ minutos, por la latencia de red
 en cada una de las cientos de consultas). Si necesitas iterar rápido, corre solo tu app:
 
-```bash
+```powershell
+$env:DJANGO_SETTINGS_MODULE="config.settings.test"
 python manage.py test apps.projects --noinput --keepdb
 python manage.py test apps.projects.tests.test_models.ProyectoModelTests --noinput --keepdb
 ```
@@ -314,11 +391,14 @@ que apunta a un commit (`e94f62b`) que **no** está integrado en `main`. Se pued
 `git tag -d archivo/etapa-1-projects-creacion` si se quiere limpiar el clon; no afecta a nadie
 más porque nunca existió en GitHub.
 
-### RESUMEN DE LO QUE NUNCA DEBEN HACER
+## RESUMEN DE LO QUE NUNCA DEBEN HACER
 
 - No editar `main` ni la rama de etapa (`etapa-N-base`) directamente.
 - No compartir una misma rama de tarea entre dos personas.
 - No correr `makemigrations` sobre una app que no es la tuya en esa etapa.
+- No correr `migrate` contra Neon ni usar `MIGRATION_DATABASE_URL`: eso es exclusivo del Integrador.
+- No pedir ni compartir la contraseña de `neondb_owner`; no va por chat, PR ni capturas.
+- No editar migraciones ya aplicadas: los cambios van en una migración nueva.
 - No editar `base.html` o `partials/` directamente — coordinar con el Integrador.
 - No modificar `requirements.txt`, `.env.example` o `config/settings/base.py` sin avisar antes en el chat del equipo.
 - No hacer `push --force` sin avisarle antes al integrador.
