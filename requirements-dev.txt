@@ -1,0 +1,4 @@
+# Herramientas solo para CI/desarrollo. No se instalan en producción.
+ruff==0.17.2
+# Necesario para que el runner paralelo de Django muestre tracebacks reales.
+tblib==3.2.2

@@ -280,6 +280,6 @@ class VacanteVistasTests(VacanteBase):
             url, self._datos(estado=m.Vacante.ESTADO_CUBIERTA)
         )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "lo asigna el sistema")
+        self.assertIn("estado", response.context["form"].errors)
         vacante.refresh_from_db()
         self.assertEqual(vacante.estado, m.Vacante.ESTADO_ABIERTA)

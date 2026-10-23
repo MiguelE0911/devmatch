@@ -432,16 +432,23 @@ deshabilitando este trigger manualmente desde la base de datos.
 de arriba dice "incluso un administrador", y es cierto para el *superusuario* de Neon. Pero un
 trigger no puede defenderse de quien tenga permiso de `ALTER TABLE`: ese rol puede ejecutar
 `ALTER TABLE vacantes DISABLE TRIGGER trg_bloquear_borrado_vacantes` y borrar todo. Por eso la
-configuración de producción usa **dos roles distintos**:
+configuración usa **dos roles distintos** (implementado el 2026-10-22):
 
 | Rol | Para qué | Permisos |
 | --- | --- | --- |
-| Rol de migraciones | `python manage.py migrate` | propiedad de las tablas (puede `ALTER`) |
-| Rol de runtime | la aplicación web | solo `SELECT`/`INSERT`/`UPDATE`/`DELETE` sobre las tablas de la app |
+| `neondb_owner` (migraciones) | `DJANGO_SETTINGS_MODULE=config.settings.migrate python manage.py migrate` | propiedad de las tablas y del esquema (puede `ALTER`) |
+| `devmatch_app` (runtime) | la aplicación web | `SELECT`/`INSERT`/`UPDATE`/`DELETE` sobre las tablas de negocio; `SELECT` sobre las tablas de infraestructura de Django |
 
-El rol de runtime **no** puede desactivar triggers, así que la garantía es real. Nunca uses el
-rol de migraciones en la aplicación: si se filtra una credencial, el atacante no solo puede
-insertar filas, puede reescribir el schema y borrar el historial entero.
+El rol de runtime **no** puede desactivar triggers, crear tablas, hacer `TRUNCATE` ni borrar el
+historial, así que la garantía es real. Nunca uses el rol de migraciones en la aplicación: si se
+filtra una credencial, el atacante no solo puede insertar filas, puede reescribir el schema y
+borrar el historial entero. La referencia pública de roles está en `DEVMATCH-DB-ROLES.md`; el
+procedimiento operativo completo (creación, grants, rotación y pruebas negativas) lo custodia el
+Integrador fuera del repositorio.
+
+Los tests locales contra Neon usan un tercer rol, `devmatch_test`, con `CREATEDB` pero sin
+permisos sobre las tablas de producción. `devmatch_app` no puede correr tests porque el runner
+de Django crea y destruye una base `test_*`.
 
 Ninguna de las 6 funciones usa `SECURITY DEFINER`, y eso es intencional: un trigger normal se
 ejecuta con los permisos del rol de runtime, que es justo lo que queremos. Si alguna vez

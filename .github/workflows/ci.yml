@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    # Se quitó 'etapa-*': si la rama tiene un PR abierto, el workflow correría
+    # dos veces por commit (una por push y otra por pull_request). Vuelve a
+    # agregarlo solo si trabajas en ramas etapa-* SIN abrir PR.
+
+# Si subes un commit nuevo mientras el anterior sigue corriendo, cancela el
+# viejo. En main no se cancela, para que cada commit mergeado quede verificado.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  DJANGO_SETTINGS_MODULE: config.settings.test
+  DJANGO_SECRET_KEY: ci-only-not-a-real-secret
+  DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+
+jobs:
+  # El linter va en su propio job: termina en segundos y corre en paralelo con
+  # los tests. Ruff completo se muestra como reporte (no bloqueante) y solo
+  # los errores reales (sintaxis, nombres indefinidos, imports rotos) fallan.
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Instalar Ruff
+        run: pip install -r requirements-dev.txt
+
+      - name: Ruff (reporte completo)
+        continue-on-error: true
+        run: ruff check --output-format=github .
+
+      - name: Ruff (errores reales)
+        run: ruff check --select E9,F63,F7,F82 --output-format=github .
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # Postgres real, vive solo durante este job. Necesario porque DevMatch usa
+    # triggers/constraints específicos de Postgres que no existen en SQLite.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: devmatch_test
+          POSTGRES_USER: devmatch
+          POSTGRES_PASSWORD: devmatch
+        ports:
+          - 5432:5432
+        # --tmpfs guarda los datos en RAM: en CI no hace falta persistir nada y
+        # las escrituras de los tests se vuelven bastante más rápidas.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          --tmpfs /var/lib/postgresql/data
+
+    env:
+      DATABASE_URL: postgresql://devmatch:devmatch@localhost:5432/devmatch_test
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Django system checks
+        run: python manage.py check
+
+      # Falla si hay cambios en modelos sin su migración committeada. Necesita
+      # una base reachable para verificar el historial de migraciones; por eso
+      # va aquí y no en el job de lint.
+      - name: Verificar que no falten migraciones
+        run: python manage.py makemigrations --check --dry-run
+
+      # El runner de Django crea su propia base test_* y aplica migraciones
+      # (incluidos los triggers). No se usa --keepdb: en CI queremos una base
+      # limpia en cada corrida. -n auto = un worker por CPU, cada uno con su
+      # propia base de datos.
+      - name: Correr tests
+        shell: bash
+        run: |
+          set -o pipefail
+          python manage.py test apps --noinput --parallel auto --durations 20 --timing 2>&1 | tee test-output.log
+
+      - name: Subir log si falla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: django-test-output
+          path: test-output.log
+          if-no-files-found: ignore
+          retention-days: 7

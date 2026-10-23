@@ -32,21 +32,21 @@ Your branch is up to date with 'origin/main'.
 Una vez clonado el repositorio, cambia a la rama de integración correspondiente a la etapa actual:
 
 ```bash
-git checkout etapa-2-base
+git checkout etapa-3-base
 ```
 
 Actualiza la rama con los últimos cambios:
 
 ```bash
-git pull origin etapa-2-base
+git pull origin etapa-3-base
 ```
 
 A partir de este punto, puedes continuar con la configuración del entorno de desarrollo indicada en las siguientes secciones.
 
-> **Importante:** no trabajes directamente sobre `etapa-2-base`. Cuando vayas a comenzar una tarea, crea tu propia rama siguiendo la convención establecida:
+> **Importante:** no trabajes directamente sobre `etapa-3-base`. Cuando vayas a comenzar una tarea, crea tu propia rama siguiendo la convención establecida:
 >
 > ```bash
-> git checkout -b etapa-2/<app>-<tarea>
+> git checkout -b etapa-3/<app>-<tarea>
 > ```
 
 ---
@@ -87,13 +87,23 @@ cp .env.example .env
 
 Pide las credenciales de acceso al Integrador y agrégalas a tu archivo `.env`.
 
-Al utilizar **Neon**, no necesitas crear una base de datos local ni configurar usuarios de PostgreSQL. La variable `DATABASE_URL` proporcionada por el Integrador conecta directamente con la base de datos compartida en la nube.
+DevMatch usa **tres roles de PostgreSQL distintos** en Neon:
 
-Ejemplo:
+- **`devmatch_app` (runtime):** lo usa `runserver` y la aplicación desplegada. Solo puede leer y escribir filas; no puede migrar, crear tablas, deshabilitar triggers ni borrar el historial.
+- **`neondb_owner` (migraciones):** solo lo usa el Integrador para `migrate`. Nunca debe ir en la aplicación.
+- **`devmatch_test` (tests):** solo crea la base `test_*` del runner de Django. No se usa en `runserver`.
+
+Tu `.env` debe quedar así (el Integrador te pasa la URL de runtime):
 
 ```env
-DATABASE_URL=postgresql://usuario:password@ep-xxxx.neon.tech/db?sslmode=require&channel_binding=require
+DATABASE_URL=postgresql://devmatch_app:password@ep-xxxx-pooler.neon.tech/devmatch_db?sslmode=require&channel_binding=require
 ```
+
+Si tenías una `DATABASE_URL` con `neondb_owner`, fue rotada y ya no sirve. Reemplázala por la de `devmatch_app`.
+
+Para correr tests locales contra Neon, el Integrador también te pasa `TEST_DATABASE_URL` (rol `devmatch_test`, con `CREATEDB`). No uses `devmatch_app` para tests: el runner de Django necesita crear una base `test_*`. Ver `docs/DEVMATCH-DISTRIBUCION.md`.
+
+Si eres dueño de un `models.py`, puedes generar su migración con `python manage.py makemigrations <app>` y commitearla. **No ejecutes `migrate` contra Neon**: el Integrador aplica las migraciones después del merge. Ver la sección "Migraciones y roles de base de datos" en `docs/DEVMATCH-DISTRIBUCION.md`.
 
 ### Generar la llave secreta de Django
 
@@ -155,12 +165,23 @@ npm run watch:css
 
 ## 5. Levantar el Servidor
 
-Por ahora, **no ejecutes migraciones** si estas todavía están siendo coordinadas por el equipo.
+**No ejecutes `migrate`:** eso lo hace únicamente el Integrador con el rol de migraciones y `config.settings.migrate`. Tu `DATABASE_URL` es el rol de runtime y no tiene permisos para migrar.
 
 Arranca la aplicación con:
 
 ```bash
 python manage.py runserver
+```
+
+Si necesitas correr migraciones y eres el Integrador:
+
+```powershell
+$env:DJANGO_SETTINGS_MODULE="config.settings.migrate"
+python manage.py migrate
+```
+
+```bash
+DJANGO_SETTINGS_MODULE=config.settings.migrate python manage.py migrate
 ```
 
 Abre en el navegador:
@@ -178,20 +199,20 @@ Si las variables de entorno están configuradas correctamente y la conexión con
 Posiciónate en la rama de integración actual y actualízala:
 
 ```bash
-git checkout etapa-2-base
-git pull origin etapa-2-base
+git checkout etapa-3-base
+git pull origin etapa-3-base
 ```
 
 Crea tu rama de tarea siguiendo estrictamente la convención:
 
 ```bash
-git checkout -b etapa-2/<app>-<tarea>
+git checkout -b etapa-3/<app>-<tarea>
 ```
 
 Por ejemplo:
 
 ```bash
-git checkout -b etapa-2/accounts-modelos
+git checkout -b etapa-3/accounts-modelos
 ```
 
 ### Durante el desarrollo
@@ -207,13 +228,13 @@ Cuando termines tu tarea:
 ```bash
 git add .
 git commit -m "Descripción de los cambios"
-git push origin etapa-2/<app>-<tarea>
+git push origin etapa-3/<app>-<tarea>
 ```
 
 Después, abre un **Pull Request (PR)** hacia:
 
 ```text
-etapa-2-base
+etapa-3-base
 ```
 
 > La rama `main` está protegida y no se deben realizar pushes directos sobre ella.
